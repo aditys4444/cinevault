@@ -1,25 +1,25 @@
 {
-  "latestVersionCode": 2610,
-  "latestVersionName": "2.6.1",
+  "latestVersionCode": 2630,
+  "latestVersionName": "2.6.3",
   "websiteUrl": "https://cinevaultapk.online/",
   "apkDownloadUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "directApkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
-  "updateMessage": "Pure player landscape mode, simplified Live TV & Downloads, clean section titles",
+  "updateMessage": "All content categories restored (Bollywood, South Indian, Cinema, Hollywood), automatic token refresh, zero playback notices, and official trailer previews for upcoming titles",
   "forceUpdate": true,
-  "version": "2.6.1",
-  "versionCode": 2610,
+  "version": "2.6.3",
+  "versionCode": 2630,
   "releaseDate": "2026-09-25",
   "changelog": [
-    "Pure player landscape mode (only video rotates, rest of app stays in portrait)",
-    "Easy exit and recovery when live streams have connection errors",
-    "Streamlined, simple and easy-to-use Live TV player & channel guide",
-    "Simplified Downloads tab for effortless offline viewing",
-    "Removed secondary badge text from all content section headers"
+    "Restored all 12 complete content shelves (Bollywood, South Indian, Hollywood, Free Blockbusters, Trending Short TV)",
+    "Fixed missing titles caused by cross-shelf deduplication",
+    "Self-healing stream playback: automatic token refresh prevents Playback Notice dialogs",
+    "Upcoming releases badged with 'Soon' and stream official trailers instead of error notices",
+    "Ultra-fast playback with zero initial stream lag"
   ],
   "apkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "mandatory": true,
   "minVersion": "2.0.0",
-  "sha256": "49e0b81ff98c3bb35d18fd9605df5d6cf30b420dd837addcde2c3fc5bb338ec0",
-  "fileSizeBytes": 9170112,
+  "sha256": "83f89fabb076e610ceb67760f8ee9f10163110a442fdf9b71ada7540aed5beb9",
+  "fileSizeBytes": 9174492,
   "fileSizeMB": "8.7MB"
 }

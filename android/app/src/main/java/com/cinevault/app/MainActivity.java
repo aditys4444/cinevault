@@ -490,15 +490,19 @@ public class MainActivity extends BridgeActivity {
 
 
     public static synchronized void ensureMovieBoxToken() {
-        if (!cachedToken.isEmpty() && System.currentTimeMillis() < tokenExpiresAt) {
+        ensureMovieBoxToken(false);
+    }
+
+    public static synchronized void ensureMovieBoxToken(boolean forceRefresh) {
+        if (!forceRefresh && !cachedToken.isEmpty() && System.currentTimeMillis() < tokenExpiresAt) {
             return;
         }
         try {
             URL url = new URL("https://mzfi.me/wefeed-h5api-bff/subject/trending?page=1&perPage=1");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-            conn.setConnectTimeout(4000);
-            conn.setReadTimeout(5000);
+            conn.setConnectTimeout(6000);
+            conn.setReadTimeout(6000);
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
             conn.setRequestProperty("Origin", "https://mzfi.me");
             conn.setRequestProperty("Referer", "https://mzfi.me/");
@@ -1747,8 +1751,10 @@ public class MainActivity extends BridgeActivity {
 
                             String bestWebUrl = "https://mzfi.me/spa/videoPlayPage/movies/" + resolvedPath + "?id=" + subjectId + "&type=/movie/detail&detailSe=" + reqSe + "&detailEp=" + reqEp + "&lang=en";
 
-                            // Priority 1: Exact season/episode for series, (0,0) for movies with &streamSignType=0
-                            int[][] attempts = isTv ? new int[][] { { reqSe, reqEp } } : new int[][] { { 0, 0 } };
+                            // Priority 1: Exact season/episode for series, with fallbacks to (1,1) and (0,0)
+                            int[][] attempts = isTv
+                                ? (reqSe > 1 || reqEp > 1 ? new int[][] { { reqSe, reqEp }, { 1, 1 }, { 0, 0 } } : new int[][] { { 1, 1 }, { 0, 0 } })
+                                : new int[][] { { 0, 0 }, { 1, 1 } };
 
                             String[] pathCandidates;
                             if (subjectId != null && !subjectId.trim().isEmpty() && !subjectId.equals(resolvedPath)) {
@@ -1757,78 +1763,84 @@ public class MainActivity extends BridgeActivity {
                                 pathCandidates = new String[] { resolvedPath };
                             }
 
-                            for (String currentPath : pathCandidates) {
-                                for (int[] att : attempts) {
-                                    int se = att[0];
-                                    int ep = att[1];
-                                    String playUrl = "https://mzfi.me/wefeed-h5api-bff/subject/play?subjectId=" + subjectId + "&se=" + se + "&ep=" + ep + "&detailPath=" + currentPath + "&streamSignType=0";
-                                    String currentWebUrl = "https://mzfi.me/spa/videoPlayPage/movies/" + currentPath + "?id=" + subjectId + "&type=/movie/detail&detailSe=" + se + "&detailEp=" + ep + "&lang=en";
+                            for (int retryRound = 0; retryRound < 2; retryRound++) {
+                                for (String currentPath : pathCandidates) {
+                                    for (int[] att : attempts) {
+                                        int se = att[0];
+                                        int ep = att[1];
+                                        String playUrl = "https://mzfi.me/wefeed-h5api-bff/subject/play?subjectId=" + subjectId + "&se=" + se + "&ep=" + ep + "&detailPath=" + currentPath + "&streamSignType=0";
+                                        String currentWebUrl = "https://mzfi.me/spa/videoPlayPage/movies/" + currentPath + "?id=" + subjectId + "&type=/movie/detail&detailSe=" + se + "&detailEp=" + ep + "&lang=en";
 
-                                    URL url = new URL(playUrl);
-                                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                                    conn.setRequestMethod("GET");
-                                    conn.setConnectTimeout(3000);
-                                    conn.setReadTimeout(4000);
-                                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-                                    conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-                                    conn.setRequestProperty("Origin", "https://mzfi.me");
-                                    conn.setRequestProperty("Referer", currentWebUrl);
-                                    if (cachedToken != null && !cachedToken.isEmpty()) {
-                                        conn.setRequestProperty("token", cachedToken);
-                                    }
-                                    if (cachedXUser != null && !cachedXUser.isEmpty()) {
-                                        conn.setRequestProperty("x-user", cachedXUser);
-                                    }
-
-                                    if (conn.getResponseCode() == 200) {
-                                        InputStream inStream = conn.getInputStream();
-                                        String enc = conn.getHeaderField("Content-Encoding");
-                                        if (enc != null && enc.toLowerCase().contains("gzip")) {
-                                            inStream = new java.util.zip.GZIPInputStream(inStream);
+                                        URL url = new URL(playUrl);
+                                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                                        conn.setRequestMethod("GET");
+                                        conn.setConnectTimeout(6000);
+                                        conn.setReadTimeout(8000);
+                                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                                        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+                                        conn.setRequestProperty("Origin", "https://mzfi.me");
+                                        conn.setRequestProperty("Referer", currentWebUrl);
+                                        if (cachedToken != null && !cachedToken.isEmpty()) {
+                                            conn.setRequestProperty("token", cachedToken);
                                         }
-                                        BufferedReader reader = new BufferedReader(new InputStreamReader(inStream, "utf-8"));
-                                        StringBuilder sb = new StringBuilder();
-                                        String line;
-                                        while ((line = reader.readLine()) != null) {
-                                            sb.append(line);
+                                        if (cachedXUser != null && !cachedXUser.isEmpty()) {
+                                            conn.setRequestProperty("x-user", cachedXUser);
                                         }
-                                        reader.close();
 
-                                        org.json.JSONObject resObj = new org.json.JSONObject(sb.toString());
-                                        if (resObj.optInt("code", -1) == 0 && resObj.has("data")) {
-                                            org.json.JSONObject dataObj = resObj.getJSONObject("data");
-                                            org.json.JSONArray streamsArr = dataObj.optJSONArray("streams");
-                                            if (streamsArr != null && streamsArr.length() > 0) {
-                                                org.json.JSONObject result = new org.json.JSONObject();
-                                                result.put("success", true);
-                                                result.put("isDirect", true);
-                                                result.put("webPlayerUrl", currentWebUrl);
-                                                org.json.JSONArray outStreams = new org.json.JSONArray();
-                                                for (int i = 0; i < streamsArr.length(); i++) {
-                                                    org.json.JSONObject s = streamsArr.getJSONObject(i);
-                                                    int rNum = s.optInt("resolutions", 720);
-                                                    long sizeBytes = s.optLong("size", 0);
-                                                    double sizeMb = sizeBytes > 0 ? Math.round((sizeBytes / (1024.0 * 1024.0)) * 10.0) / 10.0 : 0;
-                                                    String streamUrl = s.optString("url", "");
-                                                    if (!streamUrl.isEmpty()) {
-                                                        org.json.JSONObject item = new org.json.JSONObject();
-                                                        item.put("quality", rNum + "p");
-                                                        item.put("resolution", rNum + "p");
-                                                        item.put("url", getProxyVideoUrl(streamUrl));
-                                                        item.put("raw_url", streamUrl);
-                                                        item.put("size_mb", sizeMb);
-                                                        item.put("format", s.optString("format", "MP4"));
-                                                        outStreams.put(item);
+                                        if (conn.getResponseCode() == 200) {
+                                            InputStream inStream = conn.getInputStream();
+                                            String enc = conn.getHeaderField("Content-Encoding");
+                                            if (enc != null && enc.toLowerCase().contains("gzip")) {
+                                                inStream = new java.util.zip.GZIPInputStream(inStream);
+                                            }
+                                            BufferedReader reader = new BufferedReader(new InputStreamReader(inStream, "utf-8"));
+                                            StringBuilder sb = new StringBuilder();
+                                            String line;
+                                            while ((line = reader.readLine()) != null) {
+                                                sb.append(line);
+                                            }
+                                            reader.close();
+
+                                            org.json.JSONObject resObj = new org.json.JSONObject(sb.toString());
+                                            if (resObj.optInt("code", -1) == 0 && resObj.has("data")) {
+                                                org.json.JSONObject dataObj = resObj.getJSONObject("data");
+                                                org.json.JSONArray streamsArr = dataObj.optJSONArray("streams");
+                                                if (streamsArr != null && streamsArr.length() > 0) {
+                                                    org.json.JSONObject result = new org.json.JSONObject();
+                                                    result.put("success", true);
+                                                    result.put("isDirect", true);
+                                                    result.put("webPlayerUrl", currentWebUrl);
+                                                    org.json.JSONArray outStreams = new org.json.JSONArray();
+                                                    for (int i = 0; i < streamsArr.length(); i++) {
+                                                        org.json.JSONObject s = streamsArr.getJSONObject(i);
+                                                        int rNum = s.optInt("resolutions", 720);
+                                                        long sizeBytes = s.optLong("size", 0);
+                                                        double sizeMb = sizeBytes > 0 ? Math.round((sizeBytes / (1024.0 * 1024.0)) * 10.0) / 10.0 : 0;
+                                                        String streamUrl = s.optString("url", "");
+                                                        if (!streamUrl.isEmpty()) {
+                                                            org.json.JSONObject item = new org.json.JSONObject();
+                                                            item.put("quality", rNum + "p");
+                                                            item.put("resolution", rNum + "p");
+                                                            item.put("url", getProxyVideoUrl(streamUrl));
+                                                            item.put("raw_url", streamUrl);
+                                                            item.put("size_mb", sizeMb);
+                                                            item.put("format", s.optString("format", "MP4"));
+                                                            outStreams.put(item);
+                                                        }
                                                     }
+                                                    result.put("streams", outStreams);
+                                                    String resultStr = result.toString();
+                                                    STREAM_CACHE.put(cacheKey, resultStr);
+                                                    STREAM_CACHE_TS.put(cacheKey, System.currentTimeMillis());
+                                                    return resultStr;
                                                 }
-                                                result.put("streams", outStreams);
-                                                String resultStr = result.toString();
-                                                STREAM_CACHE.put(cacheKey, resultStr);
-                                                STREAM_CACHE_TS.put(cacheKey, System.currentTimeMillis());
-                                                return resultStr;
                                             }
                                         }
                                     }
+                                }
+                                // If first round yielded 0 streams, force refresh token once and retry
+                                if (retryRound == 0) {
+                                    ensureMovieBoxToken(true);
                                 }
                             }
 

@@ -62,6 +62,13 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
           }`}
         />
 
+        {/* Coming Soon Indicator */}
+        {movie.is_coming_soon && (
+          <div className="absolute top-2 left-2 flex items-center px-1.5 py-0.5 rounded-md bg-[#F0B429] text-[9px] font-bold text-[#0B0D10] shadow-sm uppercase tracking-wider">
+            Soon
+          </div>
+        )}
+
         {/* Media Type Badge */}
         <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#0B0D10]/95 text-[10px] font-medium text-[#9A9FA8] border border-[#292E35]/80 shadow-sm">
           {isTv ? <Tv className="w-2.5 h-2.5 text-blue-400" /> : <Film className="w-2.5 h-2.5 text-[#F0B429]" />}

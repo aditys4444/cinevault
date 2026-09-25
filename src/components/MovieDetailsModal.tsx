@@ -286,6 +286,11 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
                     {seasons.length > 0 ? `${seasons.length} Season${seasons.length > 1 ? 's' : ''}` : 'Series'}
                   </div>
                 )}
+                {(currentMovie.is_coming_soon || currentMovie.has_resource === false) && (
+                  <div className="px-2.5 py-1 rounded-lg bg-[#F0B429]/20 border border-[#F0B429]/50 font-bold text-[#F0B429] uppercase tracking-wider text-[11px]">
+                    Coming Soon
+                  </div>
+                )}
               </div>
 
               {/* Genres */}
@@ -308,7 +313,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 mt-5 sm:mt-6">
             <button
               type="button"
-              disabled={isLaunching}
+              disabled={isLaunching || ((currentMovie.is_coming_soon || currentMovie.has_resource === false) && !currentMovie.trailer_url)}
               onClick={handlePlayClick}
               className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#F0B429] hover:bg-[#E4BA65] active:bg-[#D99E0B] text-[#0B0D10] font-bold text-sm sm:text-base min-h-[48px] shadow-[var(--shadow-button)] transition-all press-feedback cursor-pointer disabled:opacity-80 flex-1 sm:flex-initial"
             >
@@ -317,7 +322,15 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
               ) : (
                 <Play className="w-5 h-5 fill-current" />
               )}
-              <span>{isLaunching ? 'Launching...' : isTv ? `Play S${selectedSeason} E${selectedEpisode}` : 'Play Movie'}</span>
+              <span>
+                {isLaunching
+                  ? 'Launching...'
+                  : (currentMovie.is_coming_soon || currentMovie.has_resource === false)
+                    ? (currentMovie.trailer_url ? 'Watch Trailer' : 'Coming Soon')
+                    : isTv
+                      ? `Play S${selectedSeason} E${selectedEpisode}`
+                      : 'Play Movie'}
+              </span>
             </button>
 
             {/* Offline Download Button */}

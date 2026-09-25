@@ -33,6 +33,8 @@ export interface Movie {
   media_type: 'movie' | 'tv' | 'series';
   trailer_url?: string;
   streamUrl?: string;
+  has_resource?: boolean;
+  is_coming_soon?: boolean;
   seasons?: Season[];
   cast?: (string | CastMember)[];
 }
@@ -64,6 +66,7 @@ export interface StreamResponse {
   qualities: StreamQuality[];
   webPlayerUrl: string;
   isDirect: boolean;
+  isTrailer?: boolean;
 }
 
 export interface DownloadItem {

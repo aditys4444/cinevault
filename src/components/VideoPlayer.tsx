@@ -561,7 +561,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         streamStartTimeRef.current = Date.now();
         setStreamInfo(res);
         if (!res?.streamUrl) {
-          setError('Direct stream unavailable for this title. Tap Retry to reconnect.');
+          if (currentMovie.is_coming_soon || currentMovie.has_resource === false) {
+            setError('This title is upcoming / not yet released for full streaming. Check back soon for the official release.');
+          } else {
+            setError('Direct stream unavailable for this title. Tap Retry to reconnect.');
+          }
         }
         setLoading(false);
       })
@@ -1031,6 +1035,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     setLoading(true);
     autoRetryCountRef.current = 0;
     resolvedSessionRef.current = '';
+    movieboxService.refreshStreams(
+      currentMovie.id,
+      currentMovie.detailPath,
+      currentMovie.media_type,
+      currentSeason,
+      currentEpisode,
+      currentMovie.title
+    ).catch(() => {});
     setRetryCount((prev) => prev + 1);
   };
 
@@ -1486,20 +1498,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       {!isMinimized && !loading && error && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/90 p-4 pointer-events-auto">
           <div className="flex flex-col items-center gap-4 text-center p-6 max-w-md bg-[#15181D] rounded-2xl border border-[#292E35] shadow-2xl animate-scale-in">
-            <AlertCircle className="w-12 h-12 text-red-400" />
+            <AlertCircle className={`w-12 h-12 ${(currentMovie.is_coming_soon || currentMovie.has_resource === false) ? 'text-[#F0B429]' : 'text-red-400'}`} />
             <div>
-              <h3 className="text-lg font-bold text-white font-headline">Playback Notice</h3>
+              <h3 className="text-lg font-bold text-white font-headline">
+                {(currentMovie.is_coming_soon || currentMovie.has_resource === false) ? 'Coming Soon' : 'Playback Notice'}
+              </h3>
               <p className="text-xs text-gray-400 mt-1.5 leading-relaxed font-body">{error}</p>
             </div>
-            <div className="flex items-center gap-3 mt-2">
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs hover:bg-[#F7C948] transition-colors cursor-pointer shadow-[0_4px_16px_rgba(240,180,41,0.35)] min-h-[44px] press-feedback"
-              >
-                <RotateCw className="w-4 h-4" />
-                <span>Retry Playback</span>
-              </button>
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
+              {!(currentMovie.is_coming_soon || currentMovie.has_resource === false) && (
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs hover:bg-[#F7C948] transition-colors cursor-pointer shadow-[0_4px_16px_rgba(240,180,41,0.35)] min-h-[44px] press-feedback"
+                >
+                  <RotateCw className="w-4 h-4" />
+                  <span>Retry Playback</span>
+                </button>
+              )}
+              {currentMovie.trailer_url && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setStreamInfo({
+                      streamUrl: currentMovie.trailer_url!,
+                      qualities: [{ quality: 'Trailer HD', resolution: 'Trailer', url: currentMovie.trailer_url! }],
+                      webPlayerUrl: currentMovie.trailer_url!,
+                      isDirect: true,
+                      isTrailer: true,
+                    });
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs hover:bg-[#F7C948] transition-colors cursor-pointer shadow-[0_4px_16px_rgba(240,180,41,0.35)] min-h-[44px] press-feedback"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>Watch Trailer</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onBack}
@@ -1551,6 +1586,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                   {selectedQuality === 'Offline HD' && (
                     <span className="text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0">
                       OFFLINE
+                    </span>
+                  )}
+                  {streamInfo?.isTrailer && (
+                    <span className="text-[9px] font-mono font-bold bg-[#F0B429]/20 text-[#F0B429] border border-[#F0B429]/40 px-1.5 py-0.5 rounded shrink-0 uppercase">
+                      Trailer
                     </span>
                   )}
                 </div>
