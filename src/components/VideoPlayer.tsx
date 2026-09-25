@@ -863,7 +863,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     // Apply speed setting
     video.playbackRate = playbackSpeed;
 
-    safePlay();
+    // Only invoke safePlay if video is paused (prevents Chromium decoder restart lag on autoPlay)
+    if (video.paused) {
+      safePlay();
+    }
   };
 
   const handleWaiting = () => {
@@ -1321,7 +1324,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         <video
           ref={videoRef}
           src={activeStreamUrl || undefined}
-          preload="auto"
+          preload="metadata"
           playsInline
           autoPlay
           muted={isMuted}

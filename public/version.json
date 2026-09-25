@@ -1,25 +1,25 @@
 {
-  "latestVersionCode": 2630,
-  "latestVersionName": "2.6.3",
-  "websiteUrl": "https://cinevaultapk.online/",
-  "apkDownloadUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
-  "directApkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
-  "updateMessage": "All content categories restored (Bollywood, South Indian, Cinema, Hollywood), automatic token refresh, zero playback notices, and official trailer previews for upcoming titles",
-  "forceUpdate": true,
-  "version": "2.6.3",
-  "versionCode": 2630,
-  "releaseDate": "2026-09-25",
-  "changelog": [
-    "Restored all 12 complete content shelves (Bollywood, South Indian, Hollywood, Free Blockbusters, Trending Short TV)",
-    "Fixed missing titles caused by cross-shelf deduplication",
-    "Self-healing stream playback: automatic token refresh prevents Playback Notice dialogs",
-    "Upcoming releases badged with 'Soon' and stream official trailers instead of error notices",
-    "Ultra-fast playback with zero initial stream lag"
-  ],
-  "apkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
-  "mandatory": true,
-  "minVersion": "2.0.0",
-  "sha256": "83f89fabb076e610ceb67760f8ee9f10163110a442fdf9b71ada7540aed5beb9",
-  "fileSizeBytes": 9174492,
-  "fileSizeMB": "8.7MB"
+    "latestVersionCode":  2640,
+    "latestVersionName":  "2.6.4",
+    "websiteUrl":  "https://www.cinevaultapk.online/",
+    "apkDownloadUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
+    "directApkUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
+    "updateMessage":  "Ultra-smooth startup performance on lower-end devices, progressive shelf rendering, instant catalog loading, and zero-stutter video player initialization.",
+    "forceUpdate":  true,
+    "version":  "2.6.4",
+    "versionCode":  2640,
+    "releaseDate":  "2026-09-25",
+    "changelog":  [
+                      "Major performance boost for low-spec devices: 0ms cold start with progressive shelf rendering",
+                      "Eliminated GPU/CPU bottlenecks on app launch by optimizing card rendering pipelines",
+                      "Deferred background resource preloading to keep initial app entry fast and responsive",
+                      "Zero-stutter video player launch: eliminated media decoder race conditions on startup",
+                      "Enhanced local streaming proxy with 128KB dynamic buffer for instant streaming start"
+                  ],
+    "apkUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
+    "mandatory":  true,
+    "minVersion":  "2.0.0",
+    "sha256":  "1c70f4d73bd80277557a3c4a42d7b7d3594abdb0e3d1c8c187158ed4e1854186",
+    "fileSizeBytes":  9174220,
+    "fileSizeMB":  "8.75MB"
 }

@@ -20,7 +20,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = memo(({ movie, onPlayMovie,
     setIsStarting(false);
   }, [movie?.id]);
 
-  // Pre-warm featured hero stream in background so "Play Film" starts instantly (0ms delay)
+  // Pre-warm featured hero stream in background after initial catalog has settled
   useEffect(() => {
     if (!movie?.id) return;
     const timer = setTimeout(() => {
@@ -34,7 +34,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = memo(({ movie, onPlayMovie,
           movie.title
         )
         .catch(() => {});
-    }, 1500);
+    }, 5000);
     return () => clearTimeout(timer);
   }, [movie?.id, movie?.detailPath, movie?.media_type, movie?.title]);
 

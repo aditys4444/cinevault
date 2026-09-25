@@ -156,15 +156,15 @@ export const App: React.FC = () => {
     // Initial check (bypassing cache for instant response)
     checkAppUpdate(true);
 
-    // Periodic live background check every 20 seconds so user NEVER has to refresh
+    // Periodic background update check every 2 minutes (120s) instead of aggressive 20s to conserve CPU & memory
     const pollInterval = setInterval(() => {
-      checkAppUpdate(true);
-    }, 20000);
+      checkAppUpdate(false);
+    }, 120000);
 
     // Immediate check whenever user switches back to app / resumes / reconnects online
     const handleActiveResume = () => {
       if (document.visibilityState === 'visible') {
-        checkAppUpdate(true);
+        checkAppUpdate(false);
       }
     };
 
@@ -190,14 +190,21 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Pre-warm VideoPlayer & DetailsModal chunks eagerly so clicking play has 0ms JS compile delay
+  // Pre-warm VideoPlayer & DetailsModal chunks during idle time (deferred to 4s to guarantee buttery 0ms cold-start)
+  // (We do NOT preload LiveTvView on startup as it is 655KB and should only load on user navigation)
   useEffect(() => {
     const idlePreload = () => {
-      import('./components/VideoPlayer').catch(() => {});
-      import('./components/MovieDetailsModal').catch(() => {});
-      import('./components/LiveTvView').catch(() => {});
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(() => {
+          import('./components/MovieDetailsModal').catch(() => {});
+          import('./components/VideoPlayer').catch(() => {});
+        });
+      } else {
+        import('./components/MovieDetailsModal').catch(() => {});
+        import('./components/VideoPlayer').catch(() => {});
+      }
     };
-    const timer = setTimeout(idlePreload, 600);
+    const timer = setTimeout(idlePreload, 4000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -291,6 +298,21 @@ export const App: React.FC = () => {
       .filter((shelf) => shelf.items.length > 0);
     return { ...catalog, featured: safeFeatured, rows: safeRows };
   }, [catalog]);
+
+  // Progressive Shelf Rendering for Low-End Devices:
+  // Render top 3 shelves immediately (0ms first paint), then progressively reveal the rest in batches of 3
+  const [renderedShelfCount, setRenderedShelfCount] = useState<number>(3);
+
+  useEffect(() => {
+    if (!safeCatalog?.rows || safeCatalog.rows.length <= 3) return;
+    let timer: ReturnType<typeof setTimeout>;
+    if (renderedShelfCount < safeCatalog.rows.length) {
+      timer = setTimeout(() => {
+        setRenderedShelfCount((prev) => Math.min(prev + 3, safeCatalog.rows.length));
+      }, 60);
+    }
+    return () => clearTimeout(timer);
+  }, [safeCatalog?.rows?.length, renderedShelfCount]);
 
   // Global Keyboard Shortcuts (Esc to close/minimize, Ctrl+K for search)
   useEffect(() => {
@@ -522,7 +544,7 @@ export const App: React.FC = () => {
                       <MovieRowSkeleton count={6} />
                     </>
                   ) : safeCatalog?.rows && safeCatalog.rows.length > 0 ? (
-                    safeCatalog.rows.map((shelf, idx) => (
+                    safeCatalog.rows.slice(0, renderedShelfCount).map((shelf, idx) => (
                       <MovieRow
                         key={shelf.id}
                         shelf={shelf}

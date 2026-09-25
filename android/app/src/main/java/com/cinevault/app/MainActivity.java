@@ -450,13 +450,17 @@ public class MainActivity extends BridgeActivity {
 
                 if (!"HEAD".equals(method) && cdnCode < 400) {
                     InputStream rawIn = cdnConn.getInputStream();
-                    BufferedInputStream bIn = new BufferedInputStream(rawIn, 65536);
-                    byte[] buf = new byte[65536];
+                    BufferedInputStream bIn = new BufferedInputStream(rawIn, 131072);
+                    byte[] buf = new byte[131072];
                     int r;
+                    boolean isFirstChunk = true;
                     while ((r = bIn.read(buf)) != -1) {
                         try {
                             bOut.write(buf, 0, r);
-                            bOut.flush();
+                            if (isFirstChunk) {
+                                bOut.flush();
+                                isFirstChunk = false;
+                            }
                         } catch (IOException e) {
                             // Client closed or seeked away; cleanly exit immediately
                             break;

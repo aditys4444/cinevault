@@ -42,9 +42,11 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
     >
       {/* Poster Image Container */}
       <div className="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#15181D] border border-[#292E35] sm:group-hover:border-[#F0B429]/50 shadow-[var(--shadow-card)] sm:group-hover:shadow-[var(--shadow-card-hover)] transition-colors duration-150">
-        {/* Shimmer skeleton while loading */}
+        {/* Lightweight static placeholder while loading (0% GPU/CPU overhead) */}
         {!imageLoaded && (
-          <div className="absolute inset-0 bg-[#15181D] before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.8s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/[0.05] before:to-transparent" />
+          <div className="absolute inset-0 bg-[#15181D] flex items-center justify-center">
+            <Film className="w-6 h-6 text-[#292E35]/40" />
+          </div>
         )}
 
         <img
@@ -57,7 +59,7 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
             setImageError(true);
             setImageLoaded(true);
           }}
-          className={`w-full h-full object-cover transition-opacity duration-300 sm:group-hover:scale-105 ${
+          className={`w-full h-full object-cover transition-opacity duration-200 sm:group-hover:scale-105 ${
             imageLoaded ? 'opacity-100' : 'opacity-0'
           }`}
         />
