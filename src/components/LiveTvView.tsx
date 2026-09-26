@@ -5,7 +5,6 @@ import {
   Pause,
   Volume2,
   VolumeX,
-  Volume1,
   Maximize,
   Minimize,
   Radio,
@@ -22,10 +21,6 @@ import {
   AlertCircle,
   ChevronLeft,
   Globe,
-  Sun,
-  SunMedium,
-  SunDim,
-  Scan,
   SkipForward,
   SkipBack,
 } from 'lucide-react';
@@ -53,40 +48,12 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
   const [needsUnmute, setNeedsUnmute] = useState<boolean>(false);
   const [showControls, setShowControls] = useState<boolean>(true);
 
-  // Screen Brightness, Fit Mode & Gesture Navigation State (matching VideoPlayer)
-  const [brightness, setBrightness] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('cinevault_player_brightness');
-      return saved ? Math.max(0.1, Math.min(1.0, parseFloat(saved))) : 1.0;
-    } catch {
-      return 1.0;
-    }
-  });
-  const [fitMode, setFitMode] = useState<'contain' | 'cover' | 'fill'>(() => {
-    try {
-      return (localStorage.getItem('cinevault_player_fit') as any) || 'contain';
-    } catch {
-      return 'contain';
-    }
-  });
-  const [volume, setVolume] = useState<number>(1);
-  const [activeGesture, setActiveGesture] = useState<'brightness' | 'volume' | null>(null);
-  const [gestureValue, setGestureValue] = useState<number>(100);
-
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const gestureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchStartPosRef = useRef<{
-    startX: number;
-    startY: number;
-    side: 'left' | 'right' | 'center';
-    initialVal: number;
-    hasMoved: boolean;
-  } | null>(null);
 
-  // Native Android Landscape & Immersive Fullscreen Bridge (Exact parity with VideoPlayer)
+  // Native Android Landscape & Immersive Fullscreen Bridge
   const enterLandscape = useCallback(() => {
     try {
       if (typeof window !== 'undefined' && (window as any).AndroidDevice?.setOrientation) {
@@ -124,11 +91,10 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
     setIsFullscreen(false);
     exitLandscape();
-    setFitMode('contain');
     setShowControls(true);
   }, [exitLandscape]);
 
-  // Fullscreen / Landscape Toggle (Smooth, hardware-rotated, edge-to-edge)
+  // Fullscreen / Landscape Toggle
   const toggleFullscreen = useCallback(() => {
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
     setIsFullscreen((prev) => {
@@ -137,7 +103,6 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
         enterLandscape();
       } else {
         exitLandscape();
-        setFitMode('contain');
       }
       return next;
     });
@@ -149,9 +114,6 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
     const handleOrientation = () => {
       const isLandscape = window.innerWidth > window.innerHeight;
       setIsFullscreen(isLandscape);
-      if (!isLandscape) {
-        setFitMode('contain');
-      }
     };
     window.addEventListener('resize', handleOrientation);
     window.addEventListener('orientationchange', handleOrientation);
@@ -441,34 +403,12 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
     setIsMuted(next);
     if (!next) {
       setNeedsUnmute(false);
-      video.volume = volume || 1;
+      video.volume = 1;
     }
-  }, [volume]);
-
-  // Aspect Ratio Fit Mode Cycler (Fit -> Zoom -> Stretch)
-  const cycleFitMode = useCallback(() => {
-    queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
-    setFitMode((prev) => {
-      let next: 'contain' | 'cover' | 'fill' = 'contain';
-      if (prev === 'contain') {
-        next = 'cover';
-      } else if (prev === 'cover') {
-        next = 'fill';
-      } else {
-        next = 'contain';
-      }
-      try {
-        localStorage.setItem('cinevault_player_fit', next);
-      } catch {}
-      return next;
-    });
   }, []);
 
   // Background Surface Click (Toggles controls visibility ONLY — NEVER pauses playback)
   const handleSurfaceClick = (e: React.MouseEvent) => {
-    if (touchStartPosRef.current?.hasMoved) {
-      return;
-    }
     if ((e.target as HTMLElement).closest('button, input, [role="button"], a, select')) {
       return;
     }
@@ -478,104 +418,6 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
       triggerShowControls();
     }
   };
-
-  // Touch Gesture Handlers for Brightness (Left half) and Volume (Right half) in Landscape/Fullscreen
-  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    const rect = playerContainerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = touch.clientX - rect.left;
-
-    const isLandscape = window.innerWidth > window.innerHeight || isFullscreen;
-
-    let side: 'left' | 'right' | 'center' = 'center';
-    let initialVal = 1;
-    if (isLandscape) {
-      if (x < rect.width * 0.45) {
-        side = 'left';
-        initialVal = brightness;
-      } else if (x > rect.width * 0.55) {
-        side = 'right';
-        const v = videoRef.current ? videoRef.current.volume : volume;
-        initialVal = isMuted ? 0 : v;
-      }
-    }
-
-    touchStartPosRef.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      side,
-      initialVal,
-      hasMoved: false,
-    };
-  }, [isFullscreen, brightness, volume, isMuted]);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (!touchStartPosRef.current || e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    const { startX, startY, side, initialVal } = touchStartPosRef.current;
-    if (side === 'center') return;
-
-    const deltaY = startY - touch.clientY; // Swiping up increases value
-    const deltaX = Math.abs(touch.clientX - startX);
-
-    if (!touchStartPosRef.current.hasMoved) {
-      if (Math.abs(deltaY) < 8) return;
-      if (deltaX > Math.abs(deltaY)) {
-        touchStartPosRef.current.side = 'center';
-        return;
-      }
-      touchStartPosRef.current.hasMoved = true;
-    }
-
-    const sensitivity = window.innerHeight * 0.65;
-    const change = deltaY / sensitivity;
-
-    if (gestureTimeoutRef.current) {
-      clearTimeout(gestureTimeoutRef.current);
-      gestureTimeoutRef.current = null;
-    }
-
-    if (side === 'left') {
-      const nextBrightness = Math.max(0.1, Math.min(1.0, initialVal + change));
-      setBrightness(nextBrightness);
-      try {
-        localStorage.setItem('cinevault_player_brightness', nextBrightness.toFixed(2));
-      } catch {}
-      setActiveGesture('brightness');
-      setGestureValue(Math.round(nextBrightness * 100));
-    } else if (side === 'right') {
-      const nextVol = Math.max(0, Math.min(1.0, initialVal + change));
-      if (videoRef.current) {
-        videoRef.current.volume = nextVol;
-        if (nextVol > 0 && videoRef.current.muted) {
-          videoRef.current.muted = false;
-          setIsMuted(false);
-        }
-      }
-      setVolume(nextVol);
-      if (nextVol === 0) {
-        setIsMuted(true);
-      } else if (isMuted) {
-        setIsMuted(false);
-      }
-      setActiveGesture('volume');
-      setGestureValue(Math.round(nextVol * 100));
-    }
-  }, [isMuted]);
-
-  const handleTouchEnd = useCallback(() => {
-    if (touchStartPosRef.current?.hasMoved) {
-      if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
-      gestureTimeoutRef.current = setTimeout(() => {
-        setActiveGesture(null);
-      }, 1000);
-    }
-    setTimeout(() => {
-      touchStartPosRef.current = null;
-    }, 50);
-  }, []);
 
   // Video Native Event Handlers
   const handleVideoWaiting = useCallback(() => {
@@ -686,148 +528,72 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
           <div
             ref={playerContainerRef}
             onClick={handleSurfaceClick}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={handleTouchEnd}
             className={
               isFullscreen
                 ? 'player-fullscreen-mode fixed inset-0 z-[9999] w-screen h-[100dvh] bg-black flex items-center justify-center select-none overflow-hidden touch-none'
-                : 'relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-[#292E35] select-none'
+                : 'relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-[#292E35] select-none group'
             }
           >
-            {/* HTML5 Video Tag — with Screen Fit support (contain / cover / fill) */}
+            {/* HTML5 Video Tag */}
             <video
               ref={videoRef}
               playsInline
               autoPlay
               muted={isMuted}
-              className={`w-full h-full transition-[object-fit] duration-200 ${
-                !isFullscreen
-                  ? 'object-contain'
-                  : fitMode === 'cover'
-                  ? 'object-cover'
-                  : fitMode === 'fill'
-                  ? 'object-fill'
-                  : 'object-contain'
-              } bg-black`}
+              className="w-full h-full object-contain bg-black"
               onWaiting={handleVideoWaiting}
               onPlaying={handleVideoPlaying}
               onPause={handleVideoPause}
               onStalled={handleVideoStalled}
             />
 
-            {/* Hardware-accelerated Software Brightness Scrim */}
-            {isFullscreen && (
-              <div
-                className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-100"
-                style={{
-                  backgroundColor: '#000000',
-                  opacity: Math.max(0, 1 - brightness),
-                }}
-              />
-            )}
-
-            {/* Left Edge: Brightness Gesture HUD (Landscape) */}
-            {isFullscreen && activeGesture === 'brightness' && (
-              <div className="absolute left-6 sm:left-10 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center bg-[#15181D]/90 backdrop-blur-xl border border-white/20 px-3 py-4 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.85)] pointer-events-none animate-fade-in min-w-[56px]">
-                <div className="text-[#F0B429] mb-3">
-                  {gestureValue > 60 ? (
-                    <Sun className="w-6 h-6" />
-                  ) : gestureValue > 30 ? (
-                    <SunMedium className="w-6 h-6" />
-                  ) : (
-                    <SunDim className="w-6 h-6" />
-                  )}
-                </div>
-                <div className="relative w-2 h-28 sm:h-36 bg-white/20 rounded-full overflow-hidden flex flex-col justify-end">
-                  <div
-                    className="w-full bg-gradient-to-t from-[#F0B429] to-[#FFF0B3] rounded-full transition-all duration-75"
-                    style={{ height: `${gestureValue}%` }}
-                  />
-                </div>
-                <span className="mt-3 text-[11px] font-mono font-bold text-white tracking-wider">
-                  {gestureValue}%
-                </span>
-              </div>
-            )}
-
-            {/* Right Edge: Volume Gesture HUD (Landscape) */}
-            {isFullscreen && activeGesture === 'volume' && (
-              <div className="absolute right-6 sm:right-10 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center bg-[#15181D]/90 backdrop-blur-xl border border-white/20 px-3 py-4 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.85)] pointer-events-none animate-fade-in min-w-[56px]">
-                <div className="text-[#F0B429] mb-3">
-                  {gestureValue === 0 || isMuted ? (
-                    <VolumeX className="w-6 h-6 text-red-400" />
-                  ) : gestureValue < 50 ? (
-                    <Volume1 className="w-6 h-6" />
-                  ) : (
-                    <Volume2 className="w-6 h-6" />
-                  )}
-                </div>
-                <div className="relative w-2 h-28 sm:h-36 bg-white/20 rounded-full overflow-hidden flex flex-col justify-end">
-                  <div
-                    className="w-full bg-gradient-to-t from-[#F0B429] to-[#FFF0B3] rounded-full transition-all duration-75"
-                    style={{ height: `${gestureValue}%` }}
-                  />
-                </div>
-                <span className="mt-3 text-[11px] font-mono font-bold text-white tracking-wider">
-                  {gestureValue}%
-                </span>
-              </div>
-            )}
-
             {/* Tap to Unmute Audio Banner */}
             {needsUnmute && !isLoading && (
-              <div
+              <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleMute();
                 }}
-                className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-[#F0B429] text-[#0B0D10] text-xs font-bold shadow-[0_4px_20px_rgba(240,180,41,0.4)] flex items-center gap-1.5 cursor-pointer animate-bounce select-none"
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-[#F0B429] text-[#0B0D10] text-xs font-bold shadow-[0_4px_20px_rgba(240,180,41,0.4)] flex items-center gap-1.5 cursor-pointer animate-pulse select-none active:scale-95 transition-transform"
               >
                 <VolumeX className="w-3.5 h-3.5" />
                 <span>Tap to Unmute Audio</span>
-              </div>
+              </button>
             )}
 
-            {/* Loading Spinner */}
-            {isLoading && (
-              <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-2 pointer-events-none">
-                <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-[#F0B429] animate-spin" />
-                <span className="text-xs font-mono font-bold text-gray-200 tracking-wide mt-2">
-                  Tuning into {activeChannel.name}...
+            {/* Simple Loading Spinner */}
+            {isLoading && !error && (
+              <div className="absolute inset-0 z-20 bg-black/50 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 pointer-events-none">
+                <Loader2 className="w-9 h-9 text-[#F0B429] animate-spin" />
+                <span className="text-xs font-medium text-gray-200">
+                  Loading {activeChannel.name}...
                 </span>
               </div>
             )}
 
-            {/* Error Screen with Retry & Back to Channels */}
+            {/* Error Notice */}
             {error && (
-              <div className="absolute inset-0 z-40 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center gap-3">
-                <div className="flex flex-col items-center gap-3 p-6 max-w-md bg-[#15181D] rounded-2xl border border-[#292E35] shadow-2xl">
-                  <AlertCircle className="w-10 h-10 text-red-400" />
-                  <h3 className="text-sm sm:text-base font-bold text-white font-headline">
-                    Broadcast Notice
-                  </h3>
-                  <p className="text-xs text-gray-400 leading-relaxed font-body">
-                    {error}
-                  </p>
-                  <div className="flex items-center gap-3 mt-2">
+              <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center gap-3">
+                <div className="flex flex-col items-center gap-2.5 p-5 max-w-sm bg-[#15181D] rounded-2xl border border-[#292E35] shadow-2xl">
+                  <AlertCircle className="w-8 h-8 text-red-400" />
+                  <p className="text-xs text-gray-300 font-medium leading-relaxed">{error}</p>
+                  <div className="flex items-center gap-2 mt-2">
                     <button
                       type="button"
                       onClick={handleRetryStream}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs hover:bg-[#F7C948] transition-colors cursor-pointer shadow-[0_4px_16px_rgba(240,180,41,0.35)] active:scale-95"
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs hover:bg-[#F7C948] transition-colors cursor-pointer active:scale-95"
                     >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Retry Broadcast</span>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Retry</span>
                     </button>
                     {isFullscreen && (
                       <button
                         type="button"
                         onClick={exitFullscreenMode}
-                        className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#1D2127] hover:bg-[#292E35] text-white font-medium text-xs border border-[#292E35] transition-colors cursor-pointer active:scale-95"
+                        className="px-4 py-2 rounded-xl bg-[#1D2127] text-white font-medium text-xs border border-[#292E35] transition-colors cursor-pointer active:scale-95"
                       >
-                        <ChevronLeft className="w-4 h-4" />
-                        <span>Back to Channels</span>
+                        Exit
                       </button>
                     )}
                   </div>
@@ -835,22 +601,21 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
               </div>
             )}
 
-            {/* CONTROLS OVERLAY (Matches VideoPlayer Streaming UI) */}
+            {/* NEW SIMPLE VIDEO PLAYER LAYER */}
             <div
-              className={`absolute inset-0 z-30 flex flex-col justify-between p-3 sm:p-5 transition-opacity duration-200 ${
+              className={`absolute inset-0 z-30 flex flex-col justify-between p-3 sm:p-5 bg-gradient-to-b from-black/85 via-transparent to-black/85 transition-opacity duration-200 ${
                 showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
               }`}
             >
-              {/* TOP BAR */}
+              {/* TOP BAR: Channel identity, live indicator & quality */}
               <div
-                className="flex items-center justify-between pointer-events-auto bg-gradient-to-b from-black/95 via-black/50 to-transparent p-2.5 sm:p-4 rounded-t-xl gap-3"
+                className="flex items-center justify-between gap-3 pointer-events-auto"
                 style={{
-                  paddingLeft: 'max(14px, env(safe-area-inset-left, 14px))',
-                  paddingRight: 'max(14px, env(safe-area-inset-right, 14px))',
+                  paddingLeft: 'max(8px, env(safe-area-inset-left, 8px))',
+                  paddingRight: 'max(8px, env(safe-area-inset-right, 8px))',
                 }}
               >
-                {/* Left: Back (in landscape) + Channel Logo & Title */}
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="flex items-center gap-2.5 min-w-0">
                   {isFullscreen && (
                     <button
                       type="button"
@@ -858,15 +623,14 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                         e.stopPropagation();
                         exitFullscreenMode();
                       }}
-                      className="w-10 h-10 rounded-full bg-[#15181D]/80 hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] text-white flex items-center justify-center cursor-pointer transition-colors press-feedback flex-shrink-0"
-                      title="Exit Landscape"
+                      className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/90 active:bg-black text-white flex items-center justify-center cursor-pointer transition-colors shrink-0"
                       aria-label="Back"
                     >
                       <ChevronLeft className="w-5 h-5 text-[#F0B429]" />
                     </button>
                   )}
 
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#0B0D10]/80 border border-white/10 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
+                  <div className="w-8 h-8 rounded-lg bg-black/70 border border-white/10 p-1 flex items-center justify-center overflow-hidden shrink-0">
                     <img
                       src={activeChannel.logo}
                       alt={activeChannel.name}
@@ -877,129 +641,70 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                     />
                   </div>
 
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-xs sm:text-sm md:text-base font-bold text-[#F5F5F2] truncate font-headline leading-tight">
+                      <h2 className="text-xs sm:text-sm font-bold text-white truncate leading-tight">
                         {activeChannel.name}
                       </h2>
-                      <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-red-600 text-white font-bold leading-none animate-pulse shrink-0">
+                      <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white uppercase tracking-wider shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                         LIVE
                       </span>
-                      {activeChannel.badge && (
-                        <span className="hidden sm:inline text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#F0B429]/15 text-[#F0B429] font-bold shrink-0">
-                          {activeChannel.badge}
-                        </span>
-                      )}
                     </div>
-                    <p className="text-[10px] sm:text-xs text-gray-300 truncate max-w-xs sm:max-w-md mt-0.5 font-medium">
+                    <p className="text-[10px] text-gray-300 truncate max-w-[180px] sm:max-w-xs mt-0.5">
                       {activeChannel.currentProgram}
                     </p>
                   </div>
                 </div>
 
-                {/* Right: Screen Fit toggle (Landscape) + Quality Tag */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {isFullscreen && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        cycleFitMode();
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors min-h-[36px]"
-                      title={`Screen Fit: ${fitMode === 'contain' ? 'Fit (Original)' : fitMode === 'cover' ? 'Zoom (Fill Screen)' : 'Stretch'}`}
-                      aria-label="Toggle Screen Fit"
-                    >
-                      <Scan className="w-3.5 h-3.5 text-[#F0B429]" />
-                      <span className="font-mono text-[11px] uppercase hidden sm:inline">
-                        {fitMode === 'contain' ? 'Fit' : fitMode === 'cover' ? 'Zoom' : 'Stretch'}
-                      </span>
-                    </button>
-                  )}
-
-                  <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-xl bg-white/10 border border-white/15 text-white">
-                    {activeChannel.quality}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-white/10 text-white/90 border border-white/10">
+                    {activeChannel.quality || 'HD'}
                   </span>
                 </div>
               </div>
 
-              {/* CENTER PLAY/PAUSE & CHANNEL JUMP CONTROLS */}
-              <div
-                className={`pointer-events-auto flex items-center justify-center gap-6 sm:gap-10 transition-opacity duration-200 ${
-                  isLoading ? 'opacity-0 pointer-events-none' : 'opacity-100'
-                }`}
-              >
-                {/* Previous Channel Button (Landscape) */}
-                {isFullscreen && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePrevChannel();
-                    }}
-                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/40 hover:bg-black/60 active:scale-95 border border-white/15 text-white/90 hover:text-[#F0B429] flex items-center justify-center cursor-pointer transition-all backdrop-blur-md press-feedback"
-                    title="Previous Channel"
-                    aria-label="Previous Channel"
-                  >
-                    <SkipBack className="w-5 h-5 sm:w-6 sm:h-6 text-[#F0B429]" />
-                  </button>
-                )}
-
-                {/* Big Gold Center Play/Pause Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    togglePlayPause();
-                  }}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#F0B429] hover:bg-[#F7C948] active:scale-95 text-[#0B0D10] flex items-center justify-center cursor-pointer transition-all shadow-[0_8px_30px_rgba(240,180,41,0.45)] press-feedback"
-                  title={isPlaying ? 'Pause' : 'Play'}
-                  aria-label={isPlaying ? 'Pause' : 'Play'}
-                >
-                  {isPlaying ? (
-                    <Pause className="w-7 h-7 sm:w-9 sm:h-9 fill-current" />
-                  ) : (
-                    <Play className="w-7 h-7 sm:w-9 sm:h-9 fill-current ml-1" />
-                  )}
-                </button>
-
-                {/* Next Channel Button (Landscape) */}
-                {isFullscreen && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNextChannel();
-                    }}
-                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/40 hover:bg-black/60 active:scale-95 border border-white/15 text-white/90 hover:text-[#F0B429] flex items-center justify-center cursor-pointer transition-all backdrop-blur-md press-feedback"
-                    title="Next Channel"
-                    aria-label="Next Channel"
-                  >
-                    <SkipForward className="w-5 h-5 sm:w-6 sm:h-6 text-[#F0B429]" />
-                  </button>
-                )}
-              </div>
-
-              {/* BOTTOM CONTROLS BAR */}
-              <div
-                className="flex items-center justify-between pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent p-2.5 sm:p-4 rounded-b-xl"
-                style={{
-                  paddingLeft: 'max(14px, env(safe-area-inset-left, 14px))',
-                  paddingRight: 'max(14px, env(safe-area-inset-right, 14px))',
-                }}
-              >
-                {/* Left: Play/Pause, Mute & Live Status */}
-                <div className="flex items-center gap-2 sm:gap-3">
+              {/* CENTER: Clean Single Play / Pause Button */}
+              <div className="flex items-center justify-center pointer-events-auto">
+                {!isLoading && (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       togglePlayPause();
                     }}
-                    className="w-10 h-10 rounded-xl text-white hover:text-[#F0B429] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors press-feedback"
+                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#F0B429] hover:bg-[#F7C948] active:scale-95 text-[#0B0D10] flex items-center justify-center shadow-[0_8px_24px_rgba(240,180,41,0.4)] cursor-pointer transition-transform"
                     aria-label={isPlaying ? 'Pause' : 'Play'}
                   >
-                    {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
+                    {isPlaying ? (
+                      <Pause className="w-6 h-6 sm:w-7 sm:h-7 fill-current" />
+                    ) : (
+                      <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-current ml-0.5" />
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* BOTTOM BAR: Play, Mute, Channel Switchers & Fullscreen */}
+              <div
+                className="flex items-center justify-between pointer-events-auto"
+                style={{
+                  paddingLeft: 'max(8px, env(safe-area-inset-left, 8px))',
+                  paddingRight: 'max(8px, env(safe-area-inset-right, 8px))',
+                }}
+              >
+                {/* Left: Play/Pause + Mute */}
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePlayPause();
+                    }}
+                    className="w-9 h-9 rounded-lg text-white hover:text-[#F0B429] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
+                    aria-label={isPlaying ? 'Pause' : 'Play'}
+                  >
+                    {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
                   </button>
 
                   <button
@@ -1008,98 +713,51 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                       e.stopPropagation();
                       toggleMute();
                     }}
-                    className="w-9 h-9 rounded-xl text-gray-300 hover:text-white active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors press-feedback"
-                    title={isMuted ? 'Unmute' : 'Mute'}
+                    className="w-9 h-9 rounded-lg text-white hover:text-[#F0B429] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
                     aria-label={isMuted ? 'Unmute' : 'Mute'}
                   >
-                    {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-[#F0B429]" />}
+                    {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
                   </button>
-
-                  {/* Volume Slider - Landscape Only */}
-                  {isFullscreen && (
-                    <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/40 border border-white/10 backdrop-blur-md">
-                      <Volume2 className="w-3.5 h-3.5 text-[#F0B429]" />
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.02}
-                        value={isMuted ? 0 : volume}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          if (videoRef.current) {
-                            videoRef.current.volume = val;
-                            if (val > 0 && videoRef.current.muted) {
-                              videoRef.current.muted = false;
-                              setIsMuted(false);
-                            }
-                          }
-                          setVolume(val);
-                          if (val === 0) setIsMuted(true);
-                          else if (isMuted) setIsMuted(false);
-                          setActiveGesture('volume');
-                          setGestureValue(Math.round(val * 100));
-                          if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
-                          gestureTimeoutRef.current = setTimeout(() => setActiveGesture(null), 1000);
-                        }}
-                        className="w-16 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#F0B429]"
-                        title="Audio Volume"
-                      />
-                      <span className="font-mono text-[10px] text-gray-300 w-7 text-right">{isMuted ? '0%' : `${Math.round(volume * 100)}%`}</span>
-                    </div>
-                  )}
-
-                  {/* Live Status indicator */}
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-mono font-bold select-none ml-1">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    <span>LIVE STREAM</span>
-                  </div>
                 </div>
 
-                {/* Right: Quick Channel Switcher (Landscape) + Fullscreen Toggle */}
-                <div className="flex items-center gap-2">
-                  {isFullscreen && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePrevChannel();
-                        }}
-                        className="px-2.5 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors flex items-center gap-1 min-h-[36px]"
-                        title="Previous Channel"
-                      >
-                        <SkipBack className="w-3.5 h-3.5 text-[#F0B429]" />
-                        <span className="hidden sm:inline">Prev</span>
-                      </button>
+                {/* Right: Prev Channel / Next Channel + Fullscreen */}
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrevChannel();
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 active:bg-white/30 text-white text-xs font-semibold cursor-pointer transition-colors"
+                    title="Previous Channel"
+                  >
+                    <SkipBack className="w-3.5 h-3.5 text-[#F0B429]" />
+                    <span className="hidden sm:inline">Prev</span>
+                  </button>
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleNextChannel();
-                        }}
-                        className="px-2.5 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors flex items-center gap-1 min-h-[36px]"
-                        title="Next Channel"
-                      >
-                        <span className="hidden sm:inline">Next</span>
-                        <SkipForward className="w-3.5 h-3.5 text-[#F0B429]" />
-                      </button>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleNextChannel();
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 active:bg-white/30 text-white text-xs font-semibold cursor-pointer transition-colors"
+                    title="Next Channel"
+                  >
+                    <span className="hidden sm:inline">Next</span>
+                    <SkipForward className="w-3.5 h-3.5 text-[#F0B429]" />
+                  </button>
 
-                  {/* Fullscreen Button */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleFullscreen();
                     }}
-                    className="w-10 h-10 rounded-xl text-gray-300 hover:text-white active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors press-feedback"
-                    title={isFullscreen ? 'Exit Fullscreen' : 'Landscape Mode'}
-                    aria-label={isFullscreen ? 'Exit Fullscreen' : 'Landscape Mode'}
+                    className="w-9 h-9 rounded-lg text-white hover:text-[#F0B429] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
+                    aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                   >
-                    {isFullscreen ? <Minimize className="w-5 h-5 text-white" /> : <Maximize className="w-5 h-5 text-white" />}
+                    {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
                   </button>
                 </div>
               </div>

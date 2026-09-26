@@ -16,7 +16,15 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, isReady 
       }
     }, 400);
 
-    return () => clearTimeout(minTimer);
+    // Hard safeguard: never hold splash screen for more than 700ms under any network conditions
+    const maxTimer = setTimeout(() => {
+      setFadingOut(true);
+    }, 700);
+
+    return () => {
+      clearTimeout(minTimer);
+      clearTimeout(maxTimer);
+    };
   }, [isReady]);
 
   // If data becomes ready after 400ms, fade out immediately

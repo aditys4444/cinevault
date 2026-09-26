@@ -1,25 +1,24 @@
 {
-    "latestVersionCode":  2640,
-    "latestVersionName":  "2.6.4",
-    "websiteUrl":  "https://www.cinevaultapk.online/",
-    "apkDownloadUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
-    "directApkUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
-    "updateMessage":  "Ultra-smooth startup performance on lower-end devices, progressive shelf rendering, instant catalog loading, and zero-stutter video player initialization.",
-    "forceUpdate":  true,
-    "version":  "2.6.4",
-    "versionCode":  2640,
-    "releaseDate":  "2026-09-25",
-    "changelog":  [
-                      "Major performance boost for low-spec devices: 0ms cold start with progressive shelf rendering",
-                      "Eliminated GPU/CPU bottlenecks on app launch by optimizing card rendering pipelines",
-                      "Deferred background resource preloading to keep initial app entry fast and responsive",
-                      "Zero-stutter video player launch: eliminated media decoder race conditions on startup",
-                      "Enhanced local streaming proxy with 128KB dynamic buffer for instant streaming start"
-                  ],
-    "apkUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
-    "mandatory":  true,
-    "minVersion":  "2.0.0",
-    "sha256":  "1c70f4d73bd80277557a3c4a42d7b7d3594abdb0e3d1c8c187158ed4e1854186",
-    "fileSizeBytes":  9174220,
-    "fileSizeMB":  "8.75MB"
+  "latestVersionCode": 2650,
+  "latestVersionName": "2.6.5",
+  "websiteUrl": "https://www.cinevaultapk.online/",
+  "apkDownloadUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
+  "directApkUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
+  "updateMessage": "Brand new simple Live TV video player, instant 0ms content loading on app entry, native touch responsiveness, and playback stability fixes.",
+  "forceUpdate": true,
+  "version": "2.6.5",
+  "versionCode": 2650,
+  "releaseDate": "2026-09-26",
+  "changelog": [
+    "New streamlined, clutter-free Live TV video player with instant channel zapping",
+    "Instant 0ms cold-start content loading with Stale-While-Revalidate caching",
+    "Native app touch handling: long touch text selection browser popups eliminated",
+    "Fixed MovieDetailsModal stream prefetch hook stability and runtime performance"
+  ],
+  "apkUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
+  "mandatory": true,
+  "minVersion": "2.0.0",
+  "sha256": "429cd6a65a61b12fe83a5d861d2d07aef8ab703e1fc2ee55da61b8f2ec7ea66c",
+  "fileSizeBytes": 9172324,
+  "fileSizeMB": "8.75MB"
 }

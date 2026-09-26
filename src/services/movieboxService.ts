@@ -275,28 +275,20 @@ export class MovieBoxService {
     const cached = getCached<HomeCatalogResponse>(cacheKey);
     if (cached) return cached;
 
-    // Check persistent storage cache & timestamp (v4 forces immediate retrieval of all 12 complete shelves)
-    const storedVersion = typeof window !== 'undefined' ? localStorage.getItem('cinevault_catalog_version') : null;
-    if (storedVersion !== 'v4') {
-      try {
-        localStorage.removeItem('cinevault_home_catalog');
-        localStorage.removeItem('cinevault_home_catalog_ts');
-        localStorage.setItem('cinevault_catalog_version', 'v4');
-      } catch {}
-    }
-
     const stored = this.getStoredHomeCatalog();
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-    let isCacheFresh = false;
+
+    // Fast return: if stored catalog is available, return it immediately so app enters in 0ms!
+    // If offline or cache is younger than 4 hours, no background refetch needed.
+    let isRecent = false;
     try {
       const ts = parseInt(localStorage.getItem('cinevault_home_catalog_ts') || '0', 10);
-      if (ts > 0 && Date.now() - ts < 12 * 60 * 60 * 1000 && stored && stored.rows && stored.rows.length >= 8) {
-        isCacheFresh = true;
+      if (ts > 0 && Date.now() - ts < 4 * 60 * 60 * 1000 && stored && stored.rows && stored.rows.length >= 6) {
+        isRecent = true;
       }
     } catch {}
 
-    // If user is offline or catalog is fresh (< 12 hours old with full shelves), use local storage immediately
-    if (stored && (isOffline || isCacheFresh)) {
+    if (stored && (isOffline || isRecent)) {
       setCached(cacheKey, stored, 600000);
       return stored;
     }
@@ -306,8 +298,8 @@ export class MovieBoxService {
     }
 
     const fetchPromise = (async (): Promise<HomeCatalogResponse> => {
-      // 1. Direct MovieBox H5 API call
-      const res = await this.request('/wefeed-h5api-bff/home', { timeoutMs: 6000 });
+      // 1. Direct MovieBox H5 API call with snappy 3500ms timeout
+      const res = await this.request('/wefeed-h5api-bff/home', { timeoutMs: 3500 });
       const homeData = res?.data || {};
       const operatingList = homeData.operatingList || [];
 

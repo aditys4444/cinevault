@@ -62,9 +62,19 @@
     --duration-smooth: 300ms;
   }
 
-  html {
+  *, *::before, *::after {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body, #root {
     scroll-behavior: smooth;
     background-color: #0B0D10;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
   }
 
   body {
@@ -74,6 +84,21 @@
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Prevent ghost image dragging on touch/desktop */
+  img {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  /* Real Native App: Allow text selection ONLY in text inputs and textareas */
+  input, textarea, [contenteditable="true"], .selectable-text {
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
   }
 
   h1, h2, h3, h4, .font-display, .font-headline {

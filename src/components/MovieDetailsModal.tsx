@@ -80,17 +80,18 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
     }
   }, [handleClose]);
 
-  if (!movie) return null;
+  const currentMovie: Movie | null = movie
+    ? {
+        ...movie,
+        ...(details || {}),
+      }
+    : null;
 
-  const currentMovie: Movie = {
-    ...movie,
-    ...(details || {}),
-  };
-
-  const seasons: Season[] = currentMovie.seasons || [];
-  const isTv = (currentMovie.media_type === 'series' || currentMovie.media_type === 'tv') && seasons.length > 0;
-  const activeSeasonObj = seasons.find((s) => s.season_number === selectedSeason) || seasons[0];
-  const episodes = activeSeasonObj?.episodes || [];
+  const seasons: Season[] = currentMovie?.seasons || [];
+  const isTv = Boolean(
+    (currentMovie?.media_type === 'series' || currentMovie?.media_type === 'tv') &&
+    seasons.length > 0
+  );
 
   // Background Stream Pre-fetch: Resolves CDN streams while user views details modal
   // By the time the user taps "Play", playback starts with 0ms delay!
@@ -107,7 +108,12 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
         )
         .catch(() => {});
     }
-  }, [currentMovie.id, currentMovie.detailPath, currentMovie.media_type, isTv, selectedSeason, selectedEpisode, currentMovie.title]);
+  }, [currentMovie?.id, currentMovie?.detailPath, currentMovie?.media_type, isTv, selectedSeason, selectedEpisode, currentMovie?.title]);
+
+  if (!movie || !currentMovie) return null;
+
+  const activeSeasonObj = seasons.find((s) => s.season_number === selectedSeason) || seasons[0];
+  const episodes = activeSeasonObj?.episodes || [];
 
   const handleStartDownload = async () => {
     if (!currentMovie || isDownloading) return;

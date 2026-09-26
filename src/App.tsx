@@ -115,10 +115,6 @@ export const App: React.FC = () => {
     const cached = updateService.getCachedPendingUpdate();
     return Boolean(cached?.forceUpdate);
   });
-  // Hold splash briefly for the startup parallel update check so update screen shows directly
-  const [isCheckingInitialUpdate, setIsCheckingInitialUpdate] = useState<boolean>(() => {
-    return !updateService.getCachedPendingUpdate();
-  });
 
   // Real-time remote update detection (Immediate startup + 20s background polling + Resume/Focus/Online triggers)
   useEffect(() => {
@@ -143,10 +139,6 @@ export const App: React.FC = () => {
         }
       } catch (err) {
         console.warn('[CineVault] Remote update check:', err);
-      } finally {
-        if (isMounted) {
-          setIsCheckingInitialUpdate(false);
-        }
       }
     };
 
@@ -172,13 +164,6 @@ export const App: React.FC = () => {
     window.addEventListener('focus', handleActiveResume);
     window.addEventListener('online', handleActiveResume);
 
-    // Safety fallback: after 1200ms, release splash if network is offline or unreachable
-    const safetyTimer = setTimeout(() => {
-      if (isMounted) {
-        setIsCheckingInitialUpdate(false);
-      }
-    }, 1200);
-
     return () => {
       isMounted = false;
       delete (window as any).checkCineVaultUpdate;
@@ -186,7 +171,6 @@ export const App: React.FC = () => {
       document.removeEventListener('visibilitychange', handleActiveResume);
       window.removeEventListener('focus', handleActiveResume);
       window.removeEventListener('online', handleActiveResume);
-      clearTimeout(safetyTimer);
     };
   }, []);
 
@@ -300,16 +284,16 @@ export const App: React.FC = () => {
   }, [catalog]);
 
   // Progressive Shelf Rendering for Low-End Devices:
-  // Render top 3 shelves immediately (0ms first paint), then progressively reveal the rest in batches of 3
-  const [renderedShelfCount, setRenderedShelfCount] = useState<number>(3);
+  // Render top 6 shelves immediately (0ms first paint), then progressively reveal the rest in batches of 4
+  const [renderedShelfCount, setRenderedShelfCount] = useState<number>(6);
 
   useEffect(() => {
-    if (!safeCatalog?.rows || safeCatalog.rows.length <= 3) return;
+    if (!safeCatalog?.rows || safeCatalog.rows.length <= 6) return;
     let timer: ReturnType<typeof setTimeout>;
     if (renderedShelfCount < safeCatalog.rows.length) {
       timer = setTimeout(() => {
-        setRenderedShelfCount((prev) => Math.min(prev + 3, safeCatalog.rows.length));
-      }, 60);
+        setRenderedShelfCount((prev) => Math.min(prev + 4, safeCatalog.rows.length));
+      }, 50);
     }
     return () => clearTimeout(timer);
   }, [safeCatalog?.rows?.length, renderedShelfCount]);
@@ -486,11 +470,11 @@ export const App: React.FC = () => {
       {showSplash && (
         <SplashScreen
           onComplete={() => setShowSplash(false)}
-          isReady={Boolean((catalog || !loading) && !isCheckingInitialUpdate)}
+          isReady={Boolean(catalog || !loading)}
         />
       )}
 
-      <div className="min-h-screen bg-[#0B0D10] text-[#F5F5F2] flex flex-col selection:bg-[#F0B429] selection:text-[#0B0D10]">
+      <div className="min-h-screen bg-[#0B0D10] text-[#F5F5F2] flex flex-col">
         {/* Navigation Bar */}
         {!playingMovie || isPlayerMinimized ? (
           <Navbar
