@@ -3,6 +3,7 @@
  *
  * Usage:
  *   node scripts/send-notification.cjs "Title" "Message" "Optional URL"
+ *   node scripts/send-notification.cjs "🎬 Mayday is waiting!" "Tap now and start watching. ▶️"
  *   npm run notify "JOIN TELEGRAM!! ❤️"
  */
 
@@ -10,7 +11,6 @@ const fs = require('fs');
 const path = require('path');
 
 const APP_ID = '59635604-a14e-4448-b35e-f9fa01fdee57';
-const DEFAULT_URL = 'https://t.me/+0nZRFagm4wU1MDll';
 
 function getApiKey() {
   if (process.env.ONESIGNAL_REST_API_KEY) {
@@ -35,15 +35,20 @@ async function main() {
   const args = process.argv.slice(2);
   let title = 'CineVault';
   let message = 'JOIN TELEGRAM!! ❤️';
-  let targetUrl = DEFAULT_URL;
+  let targetUrl = null;
 
   if (args.length === 1) {
     message = args[0];
+    if (message.toLowerCase().includes('telegram')) {
+      targetUrl = 'https://t.me/+0nZRFagm4wU1MDll';
+    }
   } else if (args.length >= 2) {
     title = args[0];
     message = args[1];
     if (args[2]) {
       targetUrl = args[2];
+    } else if (message.toLowerCase().includes('telegram') || title.toLowerCase().includes('telegram')) {
+      targetUrl = 'https://t.me/+0nZRFagm4wU1MDll';
     }
   }
 
@@ -52,24 +57,29 @@ async function main() {
   console.log('===============================================================');
   console.log(`Title      : ${title}`);
   console.log(`Message    : ${message}`);
-  console.log(`Target URL : ${targetUrl}`);
+  console.log(`Action     : ${targetUrl ? 'Open URL: ' + targetUrl : 'Open CineVault App directly'}`);
   console.log(`App ID     : ${APP_ID}`);
   console.log('---------------------------------------------------------------\n');
 
   try {
+    const payload = {
+      app_id: APP_ID,
+      included_segments: ['Total Subscriptions'],
+      headings: { en: title },
+      contents: { en: message }
+    };
+
+    if (targetUrl) {
+      payload.url = targetUrl;
+    }
+
     const response = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': `Key ${apiKey}`
       },
-      body: JSON.stringify({
-        app_id: APP_ID,
-        included_segments: ['Total Subscriptions'],
-        headings: { en: title },
-        contents: { en: message },
-        url: targetUrl
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();
