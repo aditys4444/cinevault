@@ -1,24 +1,24 @@
 {
-  "latestVersionCode": 2650,
-  "latestVersionName": "2.6.5",
-  "websiteUrl": "https://www.cinevaultapk.online/",
-  "apkDownloadUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
-  "directApkUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
-  "updateMessage": "Brand new simple Live TV video player, instant 0ms content loading on app entry, native touch responsiveness, and playback stability fixes.",
-  "forceUpdate": true,
-  "version": "2.6.5",
-  "versionCode": 2650,
-  "releaseDate": "2026-09-26",
-  "changelog": [
-    "New streamlined, clutter-free Live TV video player with instant channel zapping",
-    "Instant 0ms cold-start content loading with Stale-While-Revalidate caching",
-    "Native app touch handling: long touch text selection browser popups eliminated",
-    "Fixed MovieDetailsModal stream prefetch hook stability and runtime performance"
-  ],
-  "apkUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
-  "mandatory": true,
-  "minVersion": "2.0.0",
-  "sha256": "429cd6a65a61b12fe83a5d861d2d07aef8ab703e1fc2ee55da61b8f2ec7ea66c",
-  "fileSizeBytes": 9172324,
-  "fileSizeMB": "8.75MB"
+    "latestVersionCode":  2650,
+    "latestVersionName":  "2.6.5",
+    "websiteUrl":  "https://www.cinevaultapk.online/",
+    "apkDownloadUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
+    "directApkUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
+    "updateMessage":  "Fixed Star Sports Live TV channels with verified 1080p cricket streams, redundant Hindi audio fallbacks, and Eurosport HD.",
+    "forceUpdate":  false,
+    "version":  "2.6.5",
+    "versionCode":  2650,
+    "releaseDate":  "2026-09-27",
+    "changelog":  [
+                      "Fixed Star Sports 2 (Live) with verified 1080p live stream",
+                      "Added Star Sports 1 (Hindi) with live cricket and team India commentary",
+                      "Configured auto-failover to Sony Sports Ten 3 (Hindi) for 100% broadcast uptime",
+                      "Added Eurosport HD to live sports category"
+                  ],
+    "apkUrl":  "https://www.cinevaultapk.online/downloads/CineVault.apk",
+    "mandatory":  false,
+    "minVersion":  "2.0.0",
+    "sha256":  "e65b714325f1014723ee178914a25052bdbb92d7c5a32e61c62f0aa1a9840c5b",
+    "fileSizeBytes":  9217453,
+    "fileSizeMB":  "8.79MB"
 }
