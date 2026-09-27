@@ -4,8 +4,8 @@ const crypto = require('crypto');
 
 const rootDir = path.resolve(__dirname, '..');
 const webDir = path.resolve(rootDir, '../CineVaultapk Web');
-const cleanVersion = '2.6.6';
-const buildCode = 2660;
+const cleanVersion = '2.6.7';
+const buildCode = 2670;
 
 const apkPath = path.join(rootDir, 'CineVault.apk');
 const stats = fs.statSync(apkPath);

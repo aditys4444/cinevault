@@ -1,24 +1,22 @@
 {
-  "latestVersionCode": 2660,
-  "latestVersionName": "2.6.6",
-  "websiteUrl": "https://www.cinevaultapk.online/",
-  "apkDownloadUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
-  "directApkUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
-  "updateMessage": "Fixed Star Sports Live TV channels with verified 1080p cricket streams, redundant Hindi audio fallbacks, and Eurosport HD.",
+  "latestVersionCode": 2670,
+  "latestVersionName": "2.6.7",
+  "websiteUrl": "https://cinevaultapk.online/",
+  "apkDownloadUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
+  "directApkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
+  "updateMessage": "Push Notifications support & instant Telegram alerts",
   "forceUpdate": true,
-  "version": "2.6.6",
-  "versionCode": 2660,
+  "version": "2.6.7",
+  "versionCode": 2670,
   "releaseDate": "2026-09-27",
   "changelog": [
-    "Fixed Star Sports 2 (Live) with verified 1080p live stream",
-    "Added Star Sports 1 (Hindi) with live cricket and team India commentary",
-    "Configured auto-failover to Sony Sports Ten 3 (Hindi) for 100% broadcast uptime",
-    "Added Eurosport HD to live sports category"
+    "Push Notifications support & instant Telegram alerts",
+    "Star Sports Hindi Cricket live streaming fixes"
   ],
-  "apkUrl": "https://www.cinevaultapk.online/downloads/CineVault.apk",
+  "apkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "mandatory": true,
   "minVersion": "2.0.0",
-  "sha256": "0ff7620cabc21a97213d7d11573ec3973a749f1384e58cf9ea2b87124a205861",
-  "fileSizeBytes": 9172412,
-  "fileSizeMB": "8.75MB"
+  "sha256": "96fbb78a17773469601a15ad2066b44ae9533542dfc8f9670acc4cc8ad60671c",
+  "fileSizeBytes": 11409561,
+  "fileSizeMB": "10.9MB"
 }

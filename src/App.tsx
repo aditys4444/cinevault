@@ -20,6 +20,7 @@ import { Film } from 'lucide-react';
 import { cacheService } from './services/cacheService';
 import { AdultHomeView } from './components/AdultHomeView';
 import { ADULT_HOME_CATALOG, isAdultContent } from './data/adultCatalog';
+import { onesignalService } from './services/onesignalService';
 
 import { SearchModal } from './components/SearchModal';
 import type { UserProfile } from './components/ProfileView';
@@ -104,6 +105,10 @@ export const App: React.FC = () => {
     };
     updateCount();
     const interval = setInterval(updateCount, 15000);
+
+    // Initialize OneSignal Push Notifications on device
+    onesignalService.init().catch(() => {});
+
     return () => clearInterval(interval);
   }, []);
 
