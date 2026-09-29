@@ -100,8 +100,8 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* CineVault Logo in Elevated Cinema Card */}
-        <div className="relative mb-6 flex items-center justify-center w-36 h-36 sm:w-40 sm:h-40 rounded-3xl bg-[#11141B] border border-[#2B303C]/80 shadow-[0_16px_48px_rgba(0,0,0,0.85)] p-4">
-          <div className="absolute inset-0 rounded-3xl bg-[#D6A84F]/5 blur-xl pointer-events-none" />
+        <div className="relative mb-6 flex items-center justify-center w-36 h-36 sm:w-40 sm:h-40 rounded-3xl bg-[#0B1224] border border-white/[0.08] shadow-[0_16px_48px_rgba(5,10,24,0.85)] p-4">
+          <div className="absolute inset-0 rounded-3xl bg-[#176BFF]/15 blur-xl pointer-events-none" />
           <img
             src="/logo-user.png"
             alt="CineVault"
@@ -113,20 +113,20 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
         {/* Title: Update Required or Update Available */}
         <div className="flex flex-col items-center">
           {isForceUpdate && (
-            <span className="mb-2 text-[10px] tracking-[0.2em] uppercase font-bold text-[#E5BA60] bg-[#E5BA60]/10 border border-[#E5BA60]/30 px-3 py-1 rounded-full">
+            <span className="mb-2 text-[10px] tracking-[0.2em] uppercase font-bold text-[#35A7FF] bg-[#176BFF]/15 border border-[#35A7FF]/30 px-3 py-1 rounded-full">
               Action Required • Mandatory Update
             </span>
           )}
           <h2
             id="update-dialog-title"
-            className="text-2xl sm:text-[26px] font-black text-white tracking-tight leading-tight"
+            className="text-2xl sm:text-[26px] font-black text-[#F5F7FF] tracking-tight leading-tight font-headline"
           >
             {isForceUpdate ? 'Update Required' : 'Update Available'}
           </h2>
         </div>
 
         {/* Subtitle */}
-        <p className="mt-2 text-sm sm:text-base text-[#9CA3AF] font-medium leading-relaxed max-w-[280px]">
+        <p className="mt-2 text-sm sm:text-base text-[#8D9AB5] font-medium leading-relaxed max-w-[280px]">
           {isForceUpdate
             ? 'To continue using CineVault, please update to the latest version.'
             : (updateInfo.updateMessage || 'Update The Apk To The Latest Version')}
@@ -134,7 +134,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
 
         {/* Version Chip */}
         <div className="mt-3 flex items-center justify-center">
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#D6A84F]/10 border border-[#D6A84F]/30 text-[#D6A84F] font-semibold">
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#176BFF]/15 border border-[#35A7FF]/30 text-[#35A7FF] font-semibold">
             v{updateInfo.latestVersionName} Available
           </span>
         </div>
@@ -144,9 +144,9 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
           <button
             type="button"
             onClick={handleUpdateClick}
-            className="w-full py-4 px-8 rounded-full bg-gradient-to-r from-[#D6A84F] via-[#E5BA60] to-[#D6A84F] text-[#0B0D10] font-black text-base shadow-[0_10px_28px_rgba(214,168,79,0.35)] hover:shadow-[0_12px_32px_rgba(214,168,79,0.5)] active:scale-[0.97] transition-all flex items-center justify-center gap-2 cursor-pointer tracking-wide"
+            className="w-full py-4 px-8 rounded-full bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-black text-base shadow-[0_10px_28px_rgba(23,107,255,0.45)] hover:shadow-[0_12px_32px_rgba(53,167,255,0.6)] active:scale-[0.97] transition-all flex items-center justify-center gap-2 cursor-pointer tracking-wide"
           >
-            <Download className="w-5 h-5 text-[#0B0D10]" />
+            <Download className="w-5 h-5 text-white" />
             <span>Update Now</span>
           </button>
 
@@ -155,14 +155,14 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
             <button
               type="button"
               onClick={handleLaterClick}
-              className="w-full py-2.5 text-xs font-semibold text-[#8E95A5] hover:text-white transition-colors cursor-pointer"
+              className="w-full py-2.5 text-xs font-semibold text-[#8D9AB5] hover:text-[#F5F7FF] transition-colors cursor-pointer"
             >
               Later
             </button>
           )}
         </div>
 
-        <p className="mt-4 text-[11px] text-[#6B7280]">
+        <p className="mt-4 text-[11px] text-[#8D9AB5]/80">
           Official CineVault Website • https://cinevaultapk.online/
         </p>
       </div>

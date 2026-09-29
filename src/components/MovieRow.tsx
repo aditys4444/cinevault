@@ -25,12 +25,21 @@ export const MovieRow: React.FC<MovieRowProps> = memo(({ shelf, onSelectMovie, p
   if (!shelf.items || shelf.items.length === 0) return null;
 
   return (
-    <section className="relative py-2.5 sm:py-3.5 cv-lazy-section">
+    <section
+      className="relative py-2.5 sm:py-3.5 cv-lazy-section"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 240px' }}
+    >
       {/* Shelf Header */}
-      <div className="flex items-baseline justify-between px-4 sm:px-6 md:px-8 mb-2 sm:mb-2.5">
-        <h3 className="text-base sm:text-lg md:text-xl font-bold text-[#F5F5F2] tracking-tight font-headline">
-          {shelf.title}
-        </h3>
+      <div className="flex items-center justify-between px-4 sm:px-6 md:px-8 mb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-1.5 h-4.5 rounded-full bg-gradient-to-b from-[#176BFF] to-[#35A7FF] shadow-[0_0_10px_rgba(53,167,255,0.7)]" />
+          <h3 className="text-base sm:text-lg md:text-xl font-bold text-[#F5F7FF] tracking-tight font-headline">
+            {shelf.title}
+          </h3>
+        </div>
+        <span className="text-xs font-semibold text-[#35A7FF] hover:text-[#52c5ff] transition-colors cursor-pointer flex items-center gap-1 select-none">
+          Explore All
+        </span>
       </div>
 
       {/* Row Carousel Area */}
@@ -40,7 +49,7 @@ export const MovieRow: React.FC<MovieRowProps> = memo(({ shelf, onSelectMovie, p
           type="button"
           aria-label="Scroll left"
           onClick={() => handleScroll('left')}
-          className="hidden md:flex absolute -left-1 top-1/2 -translate-y-1/2 z-20 w-10 h-24 items-center justify-center bg-[#15181D]/90 hover:bg-[#1D2127] active:bg-[#0B0D10] text-[#9A9FA8] hover:text-[#F5F5F2] rounded-r-xl border-y border-r border-[#292E35] opacity-0 group-hover/row:opacity-100 transition-all cursor-pointer shadow-lg press-feedback"
+          className="hidden md:flex absolute -left-1 top-1/2 -translate-y-1/2 z-20 w-10 h-24 items-center justify-center bg-[#0E1726]/90 hover:bg-[#16223D] active:bg-[#060911] text-[#8D9AB5] hover:text-[#35A7FF] rounded-r-xl border-y border-r border-[#1E293B]/70 opacity-0 group-hover/row:opacity-100 transition-all cursor-pointer shadow-lg press-feedback backdrop-blur-md"
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
@@ -71,7 +80,7 @@ export const MovieRow: React.FC<MovieRowProps> = memo(({ shelf, onSelectMovie, p
           type="button"
           aria-label="Scroll right"
           onClick={() => handleScroll('right')}
-          className="hidden md:flex absolute -right-1 top-1/2 -translate-y-1/2 z-20 w-10 h-24 items-center justify-center bg-[#15181D]/90 hover:bg-[#1D2127] active:bg-[#0B0D10] text-[#9A9FA8] hover:text-[#F5F5F2] rounded-l-xl border-y border-l border-[#292E35] opacity-0 group-hover/row:opacity-100 transition-all cursor-pointer shadow-lg press-feedback"
+          className="hidden md:flex absolute -right-1 top-1/2 -translate-y-1/2 z-20 w-10 h-24 items-center justify-center bg-[#0E1726]/90 hover:bg-[#16223D] active:bg-[#060911] text-[#8D9AB5] hover:text-[#35A7FF] rounded-l-xl border-y border-l border-[#1E293B]/70 opacity-0 group-hover/row:opacity-100 transition-all cursor-pointer shadow-lg press-feedback backdrop-blur-md"
         >
           <ChevronRight className="w-6 h-6" />
         </button>

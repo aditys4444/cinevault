@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo, startTransition } from 'react';
 import type { Movie } from '../types/movie';
 import { movieboxService } from '../services/movieboxService';
-import { isAdultContent } from '../data/adultCatalog';
+import { isAdultContent, isAdultSearchTerm } from '../data/adultCatalog';
 import { MovieCard } from './MovieCard';
 import {
   Search,
@@ -119,6 +119,11 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
     } catch {}
   }, []);
 
+  const displayRecentSearches = React.useMemo(() => {
+    if (isAdultMode) return recentSearches;
+    return recentSearches.filter((s) => !isAdultSearchTerm(s));
+  }, [recentSearches, isAdultMode]);
+
   // Sync initialMovies if provided
   useEffect(() => {
     if (initialMovies.length > 0 && trendingMovies.length === 0) {
@@ -184,41 +189,68 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
       return;
     }
 
+    // On standard first page, immediately block any pornography/adult query suggestions
+    if (!isAdultMode && isAdultSearchTerm(q)) {
+      setSuggestions([]);
+      setLoadingSuggestions(false);
+      return;
+    }
+
     const qLower = q.toLowerCase();
 
     // 1. Instant local suggestions from initial movies & popular topics
-    const localMatches = initialMovies
+    const safeInitial = isAdultMode ? initialMovies : initialMovies.filter((m) => !isAdultContent(m));
+    const safeTrending = isAdultMode ? trendingMovies : trendingMovies.filter((m) => !isAdultContent(m));
+
+    const localMatches = safeInitial
       .filter((m) => m.title.toLowerCase().includes(qLower))
       .slice(0, 5)
       .map((m) => m.title);
 
-    const trendingMatches = trendingMovies
+    const trendingMatches = safeTrending
       .filter((m) => m.title.toLowerCase().includes(qLower))
       .slice(0, 4)
       .map((m) => m.title);
 
     const tagMatches = POPULAR_TAGS.filter((t) => t.toLowerCase().includes(qLower)).slice(0, 3);
     const instantSuggs = Array.from(new Set([...localMatches, ...trendingMatches, ...tagMatches]));
-    if (instantSuggs.length > 0) {
-      setSuggestions(instantSuggs);
+    const filteredInstant = isAdultMode ? instantSuggs : instantSuggs.filter((s) => !isAdultSearchTerm(s));
+
+    if (filteredInstant.length > 0) {
+      setSuggestions(filteredInstant);
     }
 
     setLoadingSuggestions(true);
     try {
       const serverSuggs = await movieboxService.getSuggestions(q);
-      const combined = Array.from(new Set([...(serverSuggs || []), ...instantSuggs])).slice(0, 10);
-      setSuggestions(combined);
+      const combined = Array.from(new Set([...(serverSuggs || []), ...filteredInstant]));
+      
+      // CRITICAL: When isAdultMode === false, strictly eliminate all pornography & 18+ suggestions
+      const finalSuggs = isAdultMode
+        ? combined.slice(0, 10)
+        : combined.filter((s) => !isAdultSearchTerm(s)).slice(0, 10);
+
+      setSuggestions(finalSuggs);
     } catch {
       // Keep local suggestions on network error
     } finally {
       setLoadingSuggestions(false);
     }
-  }, [initialMovies, trendingMovies]);
+  }, [initialMovies, trendingMovies, isAdultMode]);
 
   // Execute Full Search for Content (Only called when user confirms search / clicks a suggestion)
   const executeSearch = useCallback(async (text: string) => {
     const q = text.trim();
     if (!q) return;
+
+    // On standard first page, do not return pornography content
+    if (!isAdultMode && isAdultSearchTerm(q)) {
+      setResults([]);
+      setRelatedInfo(null);
+      setLoading(false);
+      setSearchMode('results');
+      return;
+    }
 
     saveRecentSearch(q);
     setSearchMode('results');
@@ -347,23 +379,23 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#0B0D10] overflow-hidden animate-slide-in-bottom">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#050A18] overflow-hidden animate-slide-in-bottom">
       {/* Top Search Header */}
-      <div className="w-full border-b border-[#292E35] bg-[#15181D] px-3 sm:px-6 md:px-8 pt-safe pb-3 shrink-0 shadow-lg">
+      <div className="w-full border-b border-white/[0.08] bg-[#0B1224] px-3 sm:px-6 md:px-8 pt-safe pb-3 shrink-0 shadow-lg">
         <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto flex items-center gap-2 sm:gap-3 pt-2">
           {/* Back button */}
           <button
             type="button"
             onClick={handleClose}
-            className="flex items-center justify-center w-10 h-10 rounded-xl text-[#9A9FA8] hover:text-[#F5F5F2] hover:bg-[#1D2127] active:bg-[#0B0D10] cursor-pointer transition-colors press-feedback touch-target-sm shrink-0"
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-[#8D9AB5] hover:text-[#F5F7FF] hover:bg-[#16223D] active:bg-[#050A18] cursor-pointer transition-colors press-feedback touch-target-sm shrink-0"
             aria-label="Back"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
           {/* Search Input Box */}
-          <div className="flex-1 flex items-center gap-2.5 px-3.5 py-2 sm:py-2.5 rounded-xl bg-[#0B0D10] border border-[#292E35] focus-within:border-[#F0B429] transition-colors min-h-[44px]">
-            <Search className="w-4 h-4 text-[#F0B429] shrink-0" />
+          <div className="flex-1 flex items-center gap-2.5 px-3.5 py-2 sm:py-2.5 rounded-xl bg-[#0E172B] border border-white/[0.1] focus-within:border-[#176BFF] focus-within:ring-2 focus-within:ring-[#176BFF]/25 transition-all min-h-[44px]">
+            <Search className="w-4 h-4 text-[#35A7FF] shrink-0" />
             <input
               ref={inputRef}
               type="text"
@@ -376,12 +408,12 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
                 }
               }}
               placeholder="Type movie or series name..."
-              className="w-full bg-transparent text-[#F5F5F2] text-sm sm:text-base focus:outline-none placeholder-[#9A9FA8] font-medium"
+              className="w-full bg-transparent text-[#F5F7FF] text-sm sm:text-base focus:outline-none placeholder-[#8D9AB5] font-medium"
               enterKeyHint="search"
             />
 
             {(loading || loadingSuggestions) && (
-              <Loader2 className="w-4 h-4 text-[#F0B429] animate-spin shrink-0" />
+              <Loader2 className="w-4 h-4 text-[#35A7FF] animate-spin shrink-0" />
             )}
 
             {query && !loading && !loadingSuggestions && (
@@ -395,7 +427,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
                   setSuggestions([]);
                   inputRef.current?.focus();
                 }}
-                className="p-1 rounded-full text-[#9A9FA8] hover:text-[#F5F5F2] hover:bg-[#1D2127] cursor-pointer transition-colors shrink-0"
+                className="p-1 rounded-full text-[#8D9AB5] hover:text-[#F5F7FF] hover:bg-[#16223D] cursor-pointer transition-colors shrink-0"
                 title="Clear search"
               >
                 <X className="w-4 h-4" />
@@ -407,7 +439,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
           <button
             type="submit"
             disabled={!query.trim()}
-            className="px-4 py-2.5 rounded-xl bg-[#F0B429] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#E4BA65] active:bg-[#D99E0B] text-[#0B0D10] font-bold text-xs sm:text-sm cursor-pointer transition-all press-feedback min-h-[44px] shrink-0"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-95 text-white font-bold text-xs sm:text-sm cursor-pointer transition-all shadow-[0_2px_12px_rgba(23,107,255,0.4)] press-feedback min-h-[44px] shrink-0"
           >
             Search
           </button>
@@ -419,27 +451,27 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
         {/* STAGE 1: SUGGESTIONS MODE (When user is typing: ONLY show movie name suggestions, NO content cards) */}
         {searchMode === 'suggestions' && query.trim() && (
           <div className="space-y-2 animate-fade-in max-w-2xl mx-auto">
-            <div className="flex items-center justify-between px-2 pb-1 border-b border-[#292E35]/60 text-xs font-mono uppercase tracking-wider text-[#9A9FA8]">
+            <div className="flex items-center justify-between px-2 pb-1 border-b border-white/[0.08] text-xs font-mono uppercase tracking-wider text-[#8D9AB5]">
               <span>Suggestions for "{query}"</span>
-              <span className="text-[10px] text-[#F0B429]">Tap to view content</span>
+              <span className="text-[10px] text-[#35A7FF]">Tap to view content</span>
             </div>
 
             {/* Direct match search action */}
             <button
               type="button"
               onClick={() => executeSearch(query)}
-              className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl bg-[#15181D] hover:bg-[#1D2127] active:bg-[#F0B429]/10 border border-[#292E35] text-left transition-all cursor-pointer group shadow-sm"
+              className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl bg-[#0E172B] hover:bg-[#16223D] active:bg-[#176BFF]/15 border border-white/[0.08] text-left transition-all cursor-pointer group shadow-sm"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-[#F0B429]/10 border border-[#F0B429]/25 flex items-center justify-center text-[#F0B429] shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-[#176BFF]/15 border border-[#35A7FF]/30 flex items-center justify-center text-[#35A7FF] shrink-0">
                   <Search className="w-4 h-4" />
                 </div>
                 <div className="truncate">
-                  <span className="text-xs text-[#9A9FA8]">Search all titles for </span>
-                  <span className="text-sm font-bold text-[#F5F5F2]">"{query}"</span>
+                  <span className="text-xs text-[#8D9AB5]">Search all titles for </span>
+                  <span className="text-sm font-bold text-[#F5F7FF]">"{query}"</span>
                 </div>
               </div>
-              <span className="text-xs font-semibold text-[#F0B429] flex items-center gap-1 shrink-0 group-hover:translate-x-0.5 transition-transform">
+              <span className="text-xs font-semibold text-[#35A7FF] flex items-center gap-1 shrink-0 group-hover:translate-x-0.5 transition-transform">
                 <span>View</span>
                 <ArrowUpRight className="w-4 h-4" />
               </span>
@@ -447,26 +479,26 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
 
             {/* Movie Title Suggestions List */}
             {suggestions.length > 0 ? (
-              <div className="bg-[#15181D]/80 border border-[#292E35] rounded-2xl overflow-hidden divide-y divide-[#292E35]/40 shadow-lg">
+              <div className="bg-[#0E172B]/90 border border-white/[0.08] rounded-2xl overflow-hidden divide-y divide-white/[0.06] shadow-xl">
                 {suggestions.map((title, idx) => (
                   <button
                     key={`${title}_${idx}`}
                     type="button"
                     onClick={() => handleSelectSuggestion(title)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[#1D2127] active:bg-[#F0B429]/10 text-left transition-colors cursor-pointer group"
+                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[#16223D] active:bg-[#176BFF]/15 text-left transition-colors cursor-pointer group"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <Film className="w-4 h-4 text-[#9A9FA8] group-hover:text-[#F0B429] shrink-0 transition-colors" />
-                      <span className="text-sm font-medium text-[#F5F5F2] group-hover:text-[#F0B429] truncate transition-colors">
+                      <Film className="w-4 h-4 text-[#8D9AB5] group-hover:text-[#35A7FF] shrink-0 transition-colors" />
+                      <span className="text-sm font-medium text-[#F5F7FF] group-hover:text-[#35A7FF] truncate transition-colors">
                         {title}
                       </span>
                     </div>
-                    <ArrowUpRight className="w-4 h-4 text-[#9A9FA8] group-hover:text-[#F0B429] shrink-0 opacity-60 group-hover:opacity-100 transition-all" />
+                    <ArrowUpRight className="w-4 h-4 text-[#8D9AB5] group-hover:text-[#35A7FF] shrink-0 opacity-60 group-hover:opacity-100 transition-all" />
                   </button>
                 ))}
               </div>
             ) : !loadingSuggestions ? (
-              <div className="text-center py-8 text-[#9A9FA8] text-xs">
+              <div className="text-center py-8 text-[#8D9AB5] text-xs">
                 Press Enter or tap "Search" above to find titles for "{query}"
               </div>
             ) : null}
@@ -478,26 +510,26 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
           <div>
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
-                <Loader2 className="w-8 h-8 text-[#F0B429] animate-spin mb-3" />
-                <p className="text-sm text-[#9A9FA8]">Searching titles for "{query}"...</p>
+                <Loader2 className="w-8 h-8 text-[#35A7FF] animate-spin mb-3" />
+                <p className="text-sm text-[#8D9AB5]">Searching titles for "{query}"...</p>
               </div>
             ) : results.length > 0 ? (
               <div className="animate-fade-in">
                 {relatedInfo?.isFallback && (
-                  <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-xl bg-[#F0B429]/10 border border-[#F0B429]/30 flex items-center justify-between gap-3 text-xs sm:text-sm animate-fade-in">
+                  <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-xl bg-[#176BFF]/10 border border-[#35A7FF]/30 flex items-center justify-between gap-3 text-xs sm:text-sm animate-fade-in">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <Sparkles className="w-4 h-4 text-[#F0B429] shrink-0" />
-                      <span className="text-[#9A9FA8] truncate">
-                        No direct match for "<span className="text-[#F5F5F2] font-semibold">{query}</span>". Showing related titles for{' '}
-                        <span className="text-[#F0B429] font-semibold">"{relatedInfo.query}"</span>:
+                      <Sparkles className="w-4 h-4 text-[#35A7FF] shrink-0" />
+                      <span className="text-[#8D9AB5] truncate">
+                        No direct match for "<span className="text-[#F5F7FF] font-semibold">{query}</span>". Showing related titles for{' '}
+                        <span className="text-[#35A7FF] font-semibold">"{relatedInfo.query}"</span>:
                       </span>
                     </div>
                   </div>
                 )}
 
                 {/* Results count header & switch back to suggestions hint */}
-                <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#292E35]">
-                  <span className="text-xs font-mono uppercase tracking-wider text-[#9A9FA8]">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/[0.08]">
+                  <span className="text-xs font-mono uppercase tracking-wider text-[#8D9AB5]">
                     {results.length} {results.length === 1 ? 'title found' : 'titles found'}
                   </span>
                   <button
@@ -506,7 +538,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
                       setSearchMode('suggestions');
                       inputRef.current?.focus();
                     }}
-                    className="text-xs text-[#F0B429] hover:underline cursor-pointer"
+                    className="text-xs text-[#35A7FF] hover:underline cursor-pointer"
                   >
                     Edit Search
                   </button>
@@ -530,13 +562,13 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
             ) : (
               /* No results state */
               <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
-                <div className="w-16 h-16 rounded-2xl bg-[#15181D] border border-[#292E35] flex items-center justify-center mb-4">
-                  <Film className="w-8 h-8 text-[#292E35]" />
+                <div className="w-16 h-16 rounded-2xl bg-[#0E172B] border border-white/[0.08] flex items-center justify-center mb-4">
+                  <Film className="w-8 h-8 text-[#8D9AB5]" />
                 </div>
-                <p className="text-[#F5F5F2] text-base font-semibold font-headline">
-                  No movies found for "<span className="text-[#F0B429]">{query}</span>"
+                <p className="text-[#F5F7FF] text-base font-semibold font-headline">
+                  No movies found for "<span className="text-[#35A7FF]">{query}</span>"
                 </p>
-                <p className="text-xs text-[#9A9FA8] mt-1.5 max-w-sm font-body">
+                <p className="text-xs text-[#8D9AB5] mt-1.5 max-w-sm font-body">
                   Try one of our popular categories below or tap a suggestion
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2 mt-5 max-w-md">
@@ -545,7 +577,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
                       key={tag}
                       type="button"
                       onClick={() => handleTagClick(tag)}
-                      className="px-3.5 py-1.5 rounded-full bg-[#15181D] hover:bg-[#F0B429]/15 active:bg-[#F0B429]/25 border border-[#292E35] hover:border-[#F0B429]/40 text-xs text-[#9A9FA8] hover:text-[#F0B429] cursor-pointer transition-colors press-feedback"
+                      className="px-3.5 py-1.5 rounded-full bg-[#0E172B] hover:bg-[#176BFF]/15 active:bg-[#176BFF]/25 border border-white/[0.08] hover:border-[#35A7FF]/40 text-xs text-[#8D9AB5] hover:text-[#35A7FF] cursor-pointer transition-colors press-feedback"
                     >
                       {tag}
                     </button>
@@ -560,32 +592,32 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
         {searchMode === 'idle' && (
           <div className="space-y-6 sm:space-y-8 animate-fade-in">
             {/* Recent Searches (if available) */}
-            {recentSearches.length > 0 && (
+            {displayRecentSearches.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-2.5">
                   <div className="flex items-center gap-2">
-                    <History className="w-4 h-4 text-[#F0B429]" />
-                    <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#9A9FA8] font-mono">
+                    <History className="w-4 h-4 text-[#35A7FF]" />
+                    <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#8D9AB5] font-mono">
                       Recent Searches
                     </h3>
                   </div>
                   <button
                     type="button"
                     onClick={clearRecentSearches}
-                    className="text-[11px] text-[#9A9FA8] hover:text-[#F5F5F2] cursor-pointer transition-colors"
+                    className="text-[11px] text-[#8D9AB5] hover:text-[#F5F7FF] cursor-pointer transition-colors"
                   >
                     Clear All
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {recentSearches.map((item, idx) => (
+                  {displayRecentSearches.map((item, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => handleTagClick(item)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#15181D] hover:bg-[#1D2127] active:bg-[#F0B429]/15 border border-[#292E35] text-xs text-[#F5F5F2] hover:text-[#F0B429] transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0E172B] hover:bg-[#16223D] active:bg-[#176BFF]/15 border border-white/[0.08] text-xs text-[#F5F7FF] hover:text-[#35A7FF] transition-colors cursor-pointer"
                     >
-                      <Clock className="w-3 h-3 text-[#9A9FA8]" />
+                      <Clock className="w-3 h-3 text-[#8D9AB5]" />
                       <span>{item}</span>
                     </button>
                   ))}
@@ -596,8 +628,8 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
             {/* Quick Explore Categories */}
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <Compass className="w-4 h-4 text-[#F0B429]" />
-                <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#9A9FA8] font-mono">
+                <Compass className="w-4 h-4 text-[#35A7FF]" />
+                <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#8D9AB5] font-mono">
                   Popular Categories & Topics
                 </h3>
               </div>
@@ -607,7 +639,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
                     key={tag}
                     type="button"
                     onClick={() => handleTagClick(tag)}
-                    className="px-3.5 py-2 rounded-full bg-[#15181D] hover:bg-[#F0B429] active:bg-[#D99E0B] border border-[#292E35] hover:border-[#F0B429] text-xs font-semibold text-[#F5F5F2] hover:text-[#0B0D10] transition-all cursor-pointer shadow-sm press-feedback min-h-[36px]"
+                    className="px-3.5 py-2 rounded-full bg-[#0E172B] hover:bg-gradient-to-r hover:from-[#176BFF] hover:to-[#35A7FF] hover:text-white active:scale-95 border border-white/[0.08] hover:border-transparent text-xs font-semibold text-[#F5F7FF] shadow-sm hover:shadow-[0_2px_12px_rgba(23,107,255,0.45)] transition-all cursor-pointer press-feedback min-h-[36px]"
                   >
                     {tag}
                   </button>
@@ -619,8 +651,8 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
             {trendingMovies.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <TrendingUp className="w-4 h-4 text-[#F0B429]" />
-                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#9A9FA8] font-mono">
+                  <TrendingUp className="w-4 h-4 text-[#35A7FF]" />
+                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#8D9AB5] font-mono">
                     Trending Right Now
                   </h3>
                 </div>

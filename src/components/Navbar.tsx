@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = memo(({
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#0B0D10]/95 backdrop-blur-md border-b border-[#292E35]/60 transition-colors shadow-[0_2px_12px_rgba(0,0,0,0.3)] pt-safe">
+    <header className="sticky top-0 z-40 w-full bg-[#060911]/90 backdrop-blur-xl border-b border-[#1E293B]/60 transition-colors shadow-[0_4px_30px_rgba(0,0,0,0.8)] pt-safe">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 h-14 sm:h-16 flex items-center justify-between">
         {/* CineVault Brand Logo with 18+ Secret Toggle */}
         <div
@@ -71,7 +71,7 @@ export const Navbar: React.FC<NavbarProps> = memo(({
               <img
                 src="/cinevault-18plus-logo.jpg"
                 alt="CineVault 18+"
-                className="h-9 sm:h-10 w-auto rounded-lg object-contain border border-[#F0B429]/60 shadow-[0_0_12px_rgba(240,180,41,0.35)]"
+                className="h-9 sm:h-10 w-auto rounded-lg object-contain border border-[#176BFF]/60 shadow-[0_0_14px_rgba(23,107,255,0.4)]"
                 draggable={false}
               />
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-red-600/20 text-red-400 border border-red-500/30">
@@ -89,14 +89,14 @@ export const Navbar: React.FC<NavbarProps> = memo(({
         </div>
 
         {/* Desktop Center Navigation Links */}
-        <div className="hidden md:flex items-center gap-1.5 bg-[#15181D]/80 border border-[#292E35] rounded-xl p-1 shadow-inner">
+        <div className="hidden md:flex items-center gap-1.5 bg-[#0E1726]/90 border border-[#1E293B]/60 rounded-xl p-1 shadow-inner backdrop-blur-md">
           <button
             type="button"
             onClick={() => onNavigate('home')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer press-feedback ${
               activeView === 'home'
-                ? 'bg-[#F0B429] text-[#0B0D10] shadow-[0_2px_8px_rgba(240,180,41,0.35)]'
-                : 'text-[#9A9FA8] hover:text-[#F5F5F2] hover:bg-[#1D2127]'
+                ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_12px_rgba(23,107,255,0.45)]'
+                : 'text-[#8D9AB5] hover:text-[#F5F7FF] hover:bg-[#16223D]'
             }`}
           >
             <Film className="w-3.5 h-3.5" />
@@ -108,8 +108,8 @@ export const Navbar: React.FC<NavbarProps> = memo(({
             onClick={() => onNavigate('livetv')}
             className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer press-feedback ${
               activeView === 'livetv'
-                ? 'bg-[#F0B429] text-[#0B0D10] shadow-[0_2px_8px_rgba(240,180,41,0.35)]'
-                : 'text-[#9A9FA8] hover:text-[#F5F5F2] hover:bg-[#1D2127]'
+                ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_12px_rgba(23,107,255,0.45)]'
+                : 'text-[#8D9AB5] hover:text-[#F5F7FF] hover:bg-[#16223D]'
             }`}
           >
             <Tv className="w-3.5 h-3.5" />
@@ -124,8 +124,8 @@ export const Navbar: React.FC<NavbarProps> = memo(({
             onClick={() => onNavigate('downloads')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer press-feedback ${
               activeView === 'downloads'
-                ? 'bg-[#F0B429] text-[#0B0D10] shadow-[0_2px_8px_rgba(240,180,41,0.35)]'
-                : 'text-[#9A9FA8] hover:text-[#F5F5F2] hover:bg-[#1D2127]'
+                ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_12px_rgba(23,107,255,0.45)]'
+                : 'text-[#8D9AB5] hover:text-[#F5F7FF] hover:bg-[#16223D]'
             }`}
           >
             <Download className="w-3.5 h-3.5" />
@@ -158,12 +158,12 @@ export const Navbar: React.FC<NavbarProps> = memo(({
             title={`VIP Profile: ${userName}`}
             className={`hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer press-feedback border ${
               activeView === 'profile'
-                ? 'bg-[#F0B429]/15 border-[#F0B429]/50 text-[#F0B429]'
-                : 'bg-transparent border-transparent hover:bg-[#15181D] text-[#9A9FA8] hover:text-[#F5F5F2]'
+                ? 'bg-[#176BFF]/15 border-[#35A7FF]/50 text-[#35A7FF]'
+                : 'bg-transparent border-transparent hover:bg-[#0E172B] text-[#8D9AB5] hover:text-[#F5F7FF]'
             }`}
           >
-            <div className="w-6 h-6 rounded-full p-[1.5px] bg-gradient-to-tr from-[#F0B429] to-[#F5F5F2]">
-              <div className="w-full h-full rounded-full bg-[#1D2127] flex items-center justify-center text-[9px] font-bold text-[#F0B429]">
+            <div className="w-6 h-6 rounded-full p-[1.5px] bg-gradient-to-tr from-[#176BFF] to-[#35A7FF]">
+              <div className="w-full h-full rounded-full bg-[#0B1224] flex items-center justify-center text-[9px] font-bold text-[#35A7FF]">
                 {userInitials}
               </div>
             </div>

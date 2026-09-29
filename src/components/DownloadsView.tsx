@@ -88,12 +88,12 @@ export const DownloadsView: React.FC<DownloadsViewProps> = memo(({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 animate-fade-in pb-24 md:pb-12">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#292E35] pb-4 mb-6">
+      <div className="flex items-center justify-between border-b border-white/[0.08] pb-4 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight font-headline text-[#F5F5F2]">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight font-headline text-[#F5F7FF]">
             Downloads
           </h1>
-          <p className="text-xs text-[#9A9FA8] mt-0.5">
+          <p className="text-xs text-[#8D9AB5] mt-0.5">
             {downloads.length === 0
               ? 'Watch offline without internet'
               : `${downloads.length} ${downloads.length === 1 ? 'item' : 'items'} available offline`}
@@ -114,20 +114,20 @@ export const DownloadsView: React.FC<DownloadsViewProps> = memo(({
 
       {/* Content */}
       {downloads.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center bg-[#15181D]/40 border border-[#292E35] rounded-2xl p-8 max-w-lg mx-auto">
-          <div className="w-16 h-16 rounded-2xl bg-[#F0B429]/10 border border-[#F0B429]/20 flex items-center justify-center text-[#F0B429] mb-4 shadow-lg shadow-[#F0B429]/5">
+        <div className="flex flex-col items-center justify-center py-20 text-center bg-[#0E172B]/60 border border-white/[0.08] rounded-2xl p-8 max-w-lg mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-[#176BFF]/15 border border-[#35A7FF]/30 flex items-center justify-center text-[#35A7FF] mb-4 shadow-[0_0_20px_rgba(23,107,255,0.25)]">
             <Download className="w-8 h-8" />
           </div>
-          <h2 className="text-base sm:text-lg font-bold text-[#F5F5F2] font-headline">
+          <h2 className="text-base sm:text-lg font-bold text-[#F5F7FF] font-headline">
             No Downloads Yet
           </h2>
-          <p className="text-xs sm:text-sm text-[#9A9FA8] mt-1.5 max-w-sm leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#8D9AB5] mt-1.5 max-w-sm leading-relaxed">
             Download your favorite movies and episodes to watch offline anywhere with zero buffering.
           </p>
           <button
             type="button"
             onClick={onExploreMovies}
-            className="mt-6 flex items-center gap-2 px-6 py-3 rounded-xl bg-[#F0B429] hover:bg-[#c49742] text-[#0B0D10] font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-[#F0B429]/20 press-feedback"
+            className="mt-6 flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] hover:brightness-110 active:scale-95 text-white font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-[0_4px_20px_rgba(23,107,255,0.45)] hover:shadow-[0_6px_25px_rgba(53,167,255,0.6)] press-feedback"
           >
             <Film className="w-4 h-4" />
             <span>Explore Movies</span>
@@ -139,10 +139,10 @@ export const DownloadsView: React.FC<DownloadsViewProps> = memo(({
             <div
               key={item.id}
               onClick={() => handlePlayDownloaded(item)}
-              className="group relative flex gap-3 p-3 bg-[#15181D] hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] hover:border-[#F0B429]/50 rounded-2xl transition-all cursor-pointer shadow-[var(--shadow-card)] overflow-hidden press-feedback"
+              className="group relative flex gap-3 p-3 bg-[#0E172B] hover:bg-[#16223D] active:bg-[#050A18] border border-white/[0.08] hover:border-[#35A7FF]/40 rounded-2xl transition-all cursor-pointer shadow-[0_4px_16px_rgba(5,10,24,0.6)] hover:shadow-[0_8px_25px_rgba(23,107,255,0.25)] overflow-hidden press-feedback"
             >
               {/* Poster Thumbnail */}
-              <div className="relative w-20 sm:w-24 aspect-[2/3] rounded-xl overflow-hidden bg-[#0B0D10] shrink-0 border border-white/10">
+              <div className="relative w-20 sm:w-24 aspect-[2/3] rounded-xl overflow-hidden bg-[#050A18] shrink-0 border border-white/[0.08]">
                 <img
                   src={item.movie.poster}
                   alt={item.title}
@@ -150,7 +150,7 @@ export const DownloadsView: React.FC<DownloadsViewProps> = memo(({
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="w-9 h-9 rounded-full bg-[#F0B429] flex items-center justify-center text-black shadow-lg">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-r from-[#176BFF] to-[#35A7FF] flex items-center justify-center text-white shadow-[0_2px_12px_rgba(23,107,255,0.5)]">
                     <Play className="w-4 h-4 fill-current ml-0.5" />
                   </div>
                 </div>
@@ -160,30 +160,30 @@ export const DownloadsView: React.FC<DownloadsViewProps> = memo(({
               <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
                 <div>
                   <div className="flex items-center justify-between gap-1">
-                    <span className="text-[10px] font-bold font-mono text-[#F0B429] bg-[#F0B429]/10 px-2 py-0.5 rounded-md border border-[#F0B429]/30">
+                    <span className="text-[10px] font-bold font-mono text-[#35A7FF] bg-[#176BFF]/15 px-2 py-0.5 rounded-md border border-[#35A7FF]/30">
                       {item.quality}
                     </span>
                     <button
                       type="button"
                       onClick={(e) => handleDeleteDownload(item.id, e)}
-                      className="flex items-center justify-center w-8 h-8 rounded-lg text-[#9A9FA8] hover:text-rose-400 hover:bg-rose-500/10 active:bg-rose-500/20 transition-colors press-feedback cursor-pointer"
+                      className="flex items-center justify-center w-8 h-8 rounded-lg text-[#8D9AB5] hover:text-rose-400 hover:bg-rose-500/10 active:bg-rose-500/20 transition-colors press-feedback cursor-pointer"
                       title="Delete from device"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
 
-                  <h3 className="text-sm font-bold text-[#F5F5F2] truncate mt-1.5 group-hover:text-[#F0B429] transition-colors leading-snug">
+                  <h3 className="text-sm font-bold text-[#F5F7FF] truncate mt-1.5 group-hover:text-[#35A7FF] transition-colors leading-snug">
                     {item.title}
                   </h3>
 
                   {item.season && item.episode && (
-                    <p className="text-[11px] text-[#9A9FA8] font-mono mt-0.5">
+                    <p className="text-[11px] text-[#8D9AB5] font-mono mt-0.5">
                       Season {item.season} • Episode {item.episode}
                     </p>
                   )}
 
-                  <div className="flex items-center gap-2 text-[11px] text-[#9A9FA8] mt-1.5">
+                  <div className="flex items-center gap-2 text-[11px] text-[#8D9AB5] mt-1.5">
                     {item.status === 'completed' && (
                       <span className="flex items-center gap-1 text-emerald-400 font-semibold">
                         <CheckCircle2 className="w-3.5 h-3.5" />
@@ -191,7 +191,7 @@ export const DownloadsView: React.FC<DownloadsViewProps> = memo(({
                       </span>
                     )}
                     {item.status === 'downloading' && (
-                      <span className="flex items-center gap-1 text-amber-400 font-semibold">
+                      <span className="flex items-center gap-1 text-[#35A7FF] font-semibold">
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         <span>Downloading {item.progress}%</span>
                       </span>
@@ -215,7 +215,7 @@ export const DownloadsView: React.FC<DownloadsViewProps> = memo(({
                 {item.status === 'downloading' && (
                   <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden mt-2">
                     <div
-                      className="bg-[#F0B429] h-full transition-all duration-300 rounded-full"
+                      className="bg-gradient-to-r from-[#176BFF] to-[#35A7FF] h-full transition-all duration-300 rounded-full shadow-[0_0_8px_rgba(53,167,255,0.6)]"
                       style={{ width: `${item.progress}%` }}
                     />
                   </div>

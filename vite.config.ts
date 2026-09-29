@@ -125,6 +125,12 @@ export default defineConfig({
           if (id.includes('node_modules/lucide-react')) {
             return 'vendor-icons';
           }
+          if (id.includes('node_modules/hls.js')) {
+            return 'vendor-hls';
+          }
+          if (id.includes('services/liveTvService')) {
+            return 'data-livetv';
+          }
         },
       },
     },

@@ -38,17 +38,17 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 text-center bg-[#0B0D10] text-[#F5F5F2] select-none animate-fade-in">
+        <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 text-center bg-[#050A18] text-[#F5F7FF] select-none animate-fade-in">
           {/* Glowing Ambient Aura */}
-          <div className="w-20 h-20 rounded-2xl bg-[#F0B429]/10 border border-[#F0B429]/30 flex items-center justify-center text-[#F0B429] mb-5 shadow-2xl">
+          <div className="w-20 h-20 rounded-2xl bg-[#176BFF]/15 border border-[#35A7FF]/30 flex items-center justify-center text-[#35A7FF] mb-5 shadow-[0_0_30px_rgba(23,107,255,0.3)]">
             <AlertTriangle className="w-9 h-9" />
           </div>
 
-          <h2 className="text-xl sm:text-2xl font-bold font-headline text-[#F5F5F2] mb-2 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-bold font-headline text-[#F5F7FF] mb-2 tracking-tight">
             {this.props.fallbackTitle || 'Something went wrong'}
           </h2>
 
-          <p className="text-xs sm:text-sm text-[#9A9FA8] max-w-md mb-8 leading-relaxed font-body">
+          <p className="text-xs sm:text-sm text-[#8D9AB5] max-w-md mb-8 leading-relaxed font-body">
             {this.props.fallbackMessage ||
               'A temporary issue occurred while rendering. You can try recovering or return to the vault.'}
           </p>
@@ -56,7 +56,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={this.handleReset}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#F0B429] hover:bg-[#F7C948] active:bg-[#D99E0B] text-[#0B0D10] text-sm font-bold transition-all press-feedback cursor-pointer shadow-[var(--shadow-button)] min-h-[48px]"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] hover:brightness-110 active:scale-95 text-white text-sm font-bold transition-all press-feedback cursor-pointer shadow-[0_4px_20px_rgba(23,107,255,0.45)] min-h-[48px]"
             >
               <RefreshCw className="w-4 h-4" />
               <span>Try Again</span>
@@ -68,9 +68,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 this.handleReset();
                 window.location.href = '/';
               }}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#15181D] hover:bg-[#1D2127] active:bg-[#0B0D10] text-[#F5F5F2] text-sm font-semibold transition-all border border-[#292E35] press-feedback cursor-pointer min-h-[48px]"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#0E172B] hover:bg-[#16223D] active:bg-[#050A18] text-[#F5F7FF] text-sm font-semibold transition-all border border-white/[0.08] press-feedback cursor-pointer min-h-[48px]"
             >
-              <Home className="w-4 h-4 text-[#F0B429]" />
+              <Home className="w-4 h-4 text-[#35A7FF]" />
               <span>Return to Vault</span>
             </button>
           </div>

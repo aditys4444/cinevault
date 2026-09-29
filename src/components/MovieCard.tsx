@@ -8,6 +8,10 @@ interface MovieCardProps {
   priority?: boolean;
 }
 
+const FALLBACK_POSTER_SVG = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450" fill="#0E172B"><rect width="300" height="450" fill="#0E172B"/><circle cx="150" cy="200" r="36" fill="#17223D"/><polygon points="142,186 166,200 142,214" fill="#35A7FF"/><rect x="75" y="270" width="150" height="12" rx="6" fill="#1E293B"/><rect x="100" y="295" width="100" height="8" rx="4" fill="#17223D"/></svg>'
+)}`;
+
 export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, priority = false }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -23,8 +27,7 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
     onSelect(movie);
   }, [movie, onSelect]);
 
-  const fallbackPoster = 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=400&q=75';
-  const posterSrc = !imageError && movie.poster ? movie.poster : fallbackPoster;
+  const posterSrc = !imageError && movie.poster ? movie.poster : FALLBACK_POSTER_SVG;
   const isTv = movie.media_type === 'series' || movie.media_type === 'tv';
 
   return (
@@ -38,14 +41,14 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
           handleCardClick();
         }
       }}
-      className="group relative flex flex-col w-[130px] sm:w-[155px] md:w-[175px] shrink-0 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B429] rounded-xl press-feedback sm:hover:scale-[1.03] scroll-snap-start"
+      className="group relative flex flex-col w-[130px] sm:w-[155px] md:w-[175px] shrink-0 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#176BFF] rounded-xl press-feedback sm:hover:scale-[1.03] transition-transform duration-200 scroll-snap-start"
     >
       {/* Poster Image Container */}
-      <div className="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#15181D] border border-[#292E35] sm:group-hover:border-[#F0B429]/50 shadow-[var(--shadow-card)] sm:group-hover:shadow-[var(--shadow-card-hover)] transition-colors duration-150">
+      <div className="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#0E1726] border border-[#1E293B] sm:group-hover:border-[#35A7FF]/50 shadow-[0_4px_16px_rgba(6,9,17,0.7)] sm:group-hover:shadow-[0_8px_25px_rgba(23,107,255,0.3)] transition-all duration-200">
         {/* Lightweight static placeholder while loading (0% GPU/CPU overhead) */}
         {!imageLoaded && (
-          <div className="absolute inset-0 bg-[#15181D] flex items-center justify-center">
-            <Film className="w-6 h-6 text-[#292E35]/40" />
+          <div className="absolute inset-0 bg-[#0E1726] flex items-center justify-center">
+            <Film className="w-6 h-6 text-white/10" />
           </div>
         )}
 
@@ -64,17 +67,22 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
           }`}
         />
 
-        {/* Coming Soon Indicator */}
-        {movie.is_coming_soon && (
-          <div className="absolute top-2 left-2 flex items-center px-1.5 py-0.5 rounded-md bg-[#F0B429] text-[9px] font-bold text-[#0B0D10] shadow-sm uppercase tracking-wider">
+        {/* Rating or Coming Soon */}
+        {movie.is_coming_soon ? (
+          <div className="absolute top-2 left-2 flex items-center px-1.5 py-0.5 rounded-md bg-[#176BFF] text-[9px] font-bold text-white shadow-sm uppercase tracking-wider">
             Soon
           </div>
-        )}
+        ) : movie.rating > 0 ? (
+          <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#060911]/85 backdrop-blur-sm border border-[#1E293B]/60 text-[10px] font-bold text-[#F5F7FF] shadow-sm">
+            <span className="text-amber-400 text-[9px]">★</span>
+            <span>{movie.rating.toFixed(1)}</span>
+          </div>
+        ) : null}
 
-        {/* Media Type Badge */}
-        <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#0B0D10]/95 text-[10px] font-medium text-[#9A9FA8] border border-[#292E35]/80 shadow-sm">
-          {isTv ? <Tv className="w-2.5 h-2.5 text-blue-400" /> : <Film className="w-2.5 h-2.5 text-[#F0B429]" />}
-          <span className="font-mono uppercase">{isTv ? 'TV' : 'Movie'}</span>
+        {/* Media Type & Quality Badge */}
+        <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#060911]/90 text-[10px] font-semibold text-[#8D9AB5] border border-white/[0.08] shadow-sm backdrop-blur-sm">
+          {isTv ? <Tv className="w-2.5 h-2.5 text-[#35A7FF]" /> : <Film className="w-2.5 h-2.5 text-[#176BFF]" />}
+          <span className="font-mono uppercase text-[9px]">{isTv ? 'SERIES' : '4K HDR'}</span>
         </div>
 
         {/* Subtle Dark Overlay on hover */}
@@ -83,9 +91,18 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
 
       {/* Metadata */}
       <div className="mt-2 flex flex-col px-0.5">
-        <h4 className="text-[13px] sm:text-sm font-semibold text-[#F5F5F2] truncate group-hover:text-[#F0B429] transition-colors leading-snug" title={movie.title}>
+        <h4 className="text-[13px] sm:text-sm font-semibold text-[#F5F7FF] truncate group-hover:text-[#35A7FF] transition-colors leading-snug" title={movie.title}>
           {movie.title}
         </h4>
+        <div className="flex items-center gap-1.5 text-[11px] text-[#8D9AB5] mt-0.5">
+          <span className="text-[#35A7FF] font-medium">{movie.release_year || (isTv ? 'Series' : 'Film')}</span>
+          {movie.genres && movie.genres.length > 0 && (
+            <>
+              <span className="text-white/20">•</span>
+              <span className="truncate">{movie.genres[0]}</span>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

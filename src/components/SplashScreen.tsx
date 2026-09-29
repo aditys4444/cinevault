@@ -46,13 +46,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, isReady 
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0B0D10] select-none transition-all duration-200 ease-out ${
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#050A18] select-none transition-all duration-200 ease-out ${
         fadingOut ? 'opacity-0 scale-[1.02] pointer-events-none' : 'opacity-100 scale-100'
       }`}
       style={{ willChange: 'opacity, transform' }}
     >
-      {/* Ambient Champagne Gold Glow */}
-      <div className="absolute w-[240px] sm:w-[320px] h-[240px] sm:h-[320px] rounded-full bg-[#F0B429]/8 blur-[80px] pointer-events-none" />
+      {/* Ambient Electric Blue Glow */}
+      <div className="absolute w-[240px] sm:w-[320px] h-[240px] sm:h-[320px] rounded-full bg-[#176BFF]/20 blur-[80px] pointer-events-none" />
 
       {/* Logo Container */}
       <div className="relative z-10 flex flex-col items-center px-6">
@@ -66,13 +66,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, isReady 
         </div>
 
         {/* Tagline */}
-        <p className="mt-5 text-[11px] sm:text-xs tracking-[0.25em] uppercase font-semibold text-[#F0B429]">
+        <p className="mt-5 text-[11px] sm:text-xs tracking-[0.25em] uppercase font-semibold text-[#35A7FF]">
           Curated Luxury Streaming
         </p>
 
         {/* Progress Indicator */}
-        <div className="w-32 sm:w-40 h-[2px] bg-[#1D2127] rounded-full mt-6 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-[#F0B429]/40 via-[#F0B429] to-[#F0B429]/40 rounded-full animate-[progress_1.2s_ease-in-out_infinite]" />
+        <div className="w-32 sm:w-40 h-[2px] bg-[#0E172B] rounded-full mt-6 overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-[#176BFF] via-[#35A7FF] to-[#176BFF] rounded-full animate-[progress_1.2s_ease-in-out_infinite]" />
         </div>
       </div>
     </div>

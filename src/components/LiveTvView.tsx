@@ -34,6 +34,70 @@ interface LiveTvViewProps {
   onSelectMovie?: (movie: any) => void;
 }
 
+interface ChannelCardProps {
+  channel: LiveChannel;
+  isActive: boolean;
+  onSelect: (channel: LiveChannel) => void;
+}
+
+const ChannelCard = memo(({ channel, isActive, onSelect }: ChannelCardProps) => {
+  return (
+    <div
+      onClick={() => onSelect(channel)}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 100px' }}
+      className={`group relative flex flex-col justify-between p-3 rounded-xl transition-all cursor-pointer select-none border ${
+        isActive
+          ? 'bg-[#176BFF]/15 border-[#35A7FF] shadow-[0_0_15px_rgba(23,107,255,0.25)]'
+          : 'bg-[#0E172B] hover:bg-[#16223D] border-white/[0.08] hover:border-[#35A7FF]/40'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="w-9 h-9 rounded-lg bg-[#050A18] border border-white/[0.08] p-1 flex items-center justify-center overflow-hidden shrink-0">
+          <img
+            src={channel.logo}
+            alt={channel.name}
+            width={36}
+            height={36}
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-contain"
+            onError={(e) => {
+              const el = e.target as HTMLElement;
+              el.style.display = 'none';
+            }}
+          />
+        </div>
+        <div className="flex flex-col items-end">
+          {isActive ? (
+            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#176BFF] text-white font-black uppercase tracking-wider animate-pulse">
+              PLAYING
+            </span>
+          ) : (
+            <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-[#8D9AB5]">
+              {channel.quality}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <h4 className={`text-xs font-bold truncate leading-tight transition-colors ${
+          isActive ? 'text-[#35A7FF]' : 'text-[#F5F7FF] group-hover:text-[#35A7FF]'
+        }`}>
+          {channel.name}
+        </h4>
+        <p className="text-[10px] text-[#8D9AB5] truncate mt-1">
+          {channel.currentProgram}
+        </p>
+      </div>
+    </div>
+  );
+}, (prev, next) => {
+  return prev.isActive === next.isActive && prev.channel.id === next.channel.id && prev.channel.currentProgram === next.channel.currentProgram;
+});
+
+ChannelCard.displayName = 'ChannelCard';
+
 export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
   const allChannels: LiveChannel[] = useMemo(() => liveTvService.getChannels(), []);
   const [selectedCategory, setSelectedCategory] = useState<ChannelCategory>('all');
@@ -248,9 +312,10 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
         startFragPrefetch: true,
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 5,
+        backBufferLength: 10,
+        maxBufferSize: 15 * 1000 * 1000,
         maxBufferLength: 10,
         maxMaxBufferLength: 20,
-        maxBufferSize: 30 * 1000 * 1000,
         maxBufferHole: 0.5,
         manifestLoadingTimeOut: 10000,
         manifestLoadingMaxRetry: 3,
@@ -454,17 +519,17 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0D10] text-[#F5F5F2] pb-24 md:pb-12">
+    <div className="min-h-screen bg-[#050A18] text-[#F5F7FF] pb-24 md:pb-12">
       {/* Top Header & Search Bar (Only shown in portrait mode) */}
       {!isFullscreen && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#292E35]/60 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
             <div className="flex items-center gap-2">
               <span className="flex h-2.5 w-2.5 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
               </span>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight font-headline text-[#F5F5F2]">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight font-headline text-[#F5F7FF]">
                 Live TV
               </h1>
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 font-mono">
@@ -474,19 +539,19 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
 
             {/* Quick Search Input */}
             <div className="relative w-full sm:w-72">
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 text-[#8D9AB5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search Aaj Tak, Star, Sports..."
-                className="w-full pl-9 pr-3 py-1.5 sm:py-2 rounded-xl bg-[#15181D] border border-[#292E35] text-xs sm:text-sm text-[#F5F5F2] placeholder-gray-500 focus:outline-none focus:border-[#F0B429] transition-colors"
+                className="w-full pl-9 pr-3 py-1.5 sm:py-2 rounded-xl bg-[#0E172B] border border-white/[0.1] text-xs sm:text-sm text-[#F5F7FF] placeholder-[#8D9AB5] focus:outline-none focus:border-[#176BFF] focus:ring-1 focus:ring-[#176BFF] transition-colors"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-white"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8D9AB5] hover:text-white"
                 >
                   ✕
                 </button>
@@ -508,8 +573,8 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                   }}
                   className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
                     isSelected
-                      ? 'bg-[#F0B429] text-[#0B0D10] border-[#F0B429] shadow-[0_2px_10px_rgba(240,180,41,0.3)]'
-                      : 'bg-[#15181D] text-gray-300 hover:text-white hover:bg-[#1D2127] border-[#292E35]'
+                      ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white border-transparent shadow-[0_2px_10px_rgba(23,107,255,0.4)]'
+                      : 'bg-[#0E172B] text-[#8D9AB5] hover:text-[#F5F7FF] hover:bg-[#16223D] border-white/[0.08]'
                   }`}
                 >
                   {renderCategoryIcon(cat.id)}
@@ -531,7 +596,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
             className={
               isFullscreen
                 ? 'player-fullscreen-mode fixed inset-0 z-[9999] w-screen h-[100dvh] bg-black flex items-center justify-center select-none overflow-hidden touch-none'
-                : 'relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-[#292E35] select-none group'
+                : 'relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/[0.08] select-none group'
             }
           >
             {/* HTML5 Video Tag */}
@@ -555,7 +620,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                   e.stopPropagation();
                   toggleMute();
                 }}
-                className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-[#F0B429] text-[#0B0D10] text-xs font-bold shadow-[0_4px_20px_rgba(240,180,41,0.4)] flex items-center gap-1.5 cursor-pointer animate-pulse select-none active:scale-95 transition-transform"
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white text-xs font-bold shadow-[0_4px_20px_rgba(23,107,255,0.4)] flex items-center gap-1.5 cursor-pointer animate-pulse select-none active:scale-95 transition-transform"
               >
                 <VolumeX className="w-3.5 h-3.5" />
                 <span>Tap to Unmute Audio</span>
@@ -565,8 +630,8 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
             {/* Simple Loading Spinner */}
             {isLoading && !error && (
               <div className="absolute inset-0 z-20 bg-black/50 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 pointer-events-none">
-                <Loader2 className="w-9 h-9 text-[#F0B429] animate-spin" />
-                <span className="text-xs font-medium text-gray-200">
+                <Loader2 className="w-9 h-9 text-[#35A7FF] animate-spin" />
+                <span className="text-xs font-medium text-[#F5F7FF]">
                   Loading {activeChannel.name}...
                 </span>
               </div>
@@ -575,14 +640,14 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
             {/* Error Notice */}
             {error && (
               <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center gap-3">
-                <div className="flex flex-col items-center gap-2.5 p-5 max-w-sm bg-[#15181D] rounded-2xl border border-[#292E35] shadow-2xl">
+                <div className="flex flex-col items-center gap-2.5 p-5 max-w-sm bg-[#0B1224] rounded-2xl border border-white/[0.08] shadow-2xl">
                   <AlertCircle className="w-8 h-8 text-red-400" />
-                  <p className="text-xs text-gray-300 font-medium leading-relaxed">{error}</p>
+                  <p className="text-xs text-[#8D9AB5] font-medium leading-relaxed">{error}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <button
                       type="button"
                       onClick={handleRetryStream}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs hover:bg-[#F7C948] transition-colors cursor-pointer active:scale-95"
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold text-xs hover:brightness-110 shadow-[0_2px_10px_rgba(23,107,255,0.4)] transition-all cursor-pointer active:scale-95"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Retry</span>
@@ -591,7 +656,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                       <button
                         type="button"
                         onClick={exitFullscreenMode}
-                        className="px-4 py-2 rounded-xl bg-[#1D2127] text-white font-medium text-xs border border-[#292E35] transition-colors cursor-pointer active:scale-95"
+                        className="px-4 py-2 rounded-xl bg-[#0E172B] text-white font-medium text-xs border border-white/[0.08] transition-colors cursor-pointer active:scale-95"
                       >
                         Exit
                       </button>
@@ -626,11 +691,11 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                       className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/90 active:bg-black text-white flex items-center justify-center cursor-pointer transition-colors shrink-0"
                       aria-label="Back"
                     >
-                      <ChevronLeft className="w-5 h-5 text-[#F0B429]" />
+                      <ChevronLeft className="w-5 h-5 text-[#35A7FF]" />
                     </button>
                   )}
 
-                  <div className="w-8 h-8 rounded-lg bg-black/70 border border-white/10 p-1 flex items-center justify-center overflow-hidden shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-[#050A18] border border-white/10 p-1 flex items-center justify-center overflow-hidden shrink-0">
                     <img
                       src={activeChannel.logo}
                       alt={activeChannel.name}
@@ -651,7 +716,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                         LIVE
                       </span>
                     </div>
-                    <p className="text-[10px] text-gray-300 truncate max-w-[180px] sm:max-w-xs mt-0.5">
+                    <p className="text-[10px] text-[#8D9AB5] truncate max-w-[180px] sm:max-w-xs mt-0.5">
                       {activeChannel.currentProgram}
                     </p>
                   </div>
@@ -673,7 +738,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                       e.stopPropagation();
                       togglePlayPause();
                     }}
-                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#F0B429] hover:bg-[#F7C948] active:scale-95 text-[#0B0D10] flex items-center justify-center shadow-[0_8px_24px_rgba(240,180,41,0.4)] cursor-pointer transition-transform"
+                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-r from-[#176BFF] to-[#35A7FF] hover:brightness-110 active:scale-95 text-white flex items-center justify-center shadow-[0_8px_24px_rgba(23,107,255,0.45)] cursor-pointer transition-transform"
                     aria-label={isPlaying ? 'Pause' : 'Play'}
                   >
                     {isPlaying ? (
@@ -701,7 +766,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                       e.stopPropagation();
                       togglePlayPause();
                     }}
-                    className="w-9 h-9 rounded-lg text-white hover:text-[#F0B429] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
+                    className="w-9 h-9 rounded-lg text-white hover:text-[#35A7FF] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
                     aria-label={isPlaying ? 'Pause' : 'Play'}
                   >
                     {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
@@ -713,7 +778,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                       e.stopPropagation();
                       toggleMute();
                     }}
-                    className="w-9 h-9 rounded-lg text-white hover:text-[#F0B429] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
+                    className="w-9 h-9 rounded-lg text-white hover:text-[#35A7FF] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
                     aria-label={isMuted ? 'Unmute' : 'Mute'}
                   >
                     {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
@@ -731,7 +796,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 active:bg-white/30 text-white text-xs font-semibold cursor-pointer transition-colors"
                     title="Previous Channel"
                   >
-                    <SkipBack className="w-3.5 h-3.5 text-[#F0B429]" />
+                    <SkipBack className="w-3.5 h-3.5 text-[#35A7FF]" />
                     <span className="hidden sm:inline">Prev</span>
                   </button>
 
@@ -745,7 +810,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                     title="Next Channel"
                   >
                     <span className="hidden sm:inline">Next</span>
-                    <SkipForward className="w-3.5 h-3.5 text-[#F0B429]" />
+                    <SkipForward className="w-3.5 h-3.5 text-[#35A7FF]" />
                   </button>
 
                   <button
@@ -754,7 +819,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                       e.stopPropagation();
                       toggleFullscreen();
                     }}
-                    className="w-9 h-9 rounded-lg text-white hover:text-[#F0B429] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
+                    className="w-9 h-9 rounded-lg text-white hover:text-[#35A7FF] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
                     aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                   >
                     {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
@@ -766,9 +831,9 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
 
           {/* Active Channel Info Strip (Portrait only) */}
           {!isFullscreen && (
-            <div className="bg-[#15181D] border border-[#292E35] rounded-xl p-3 flex items-center justify-between">
+            <div className="bg-[#0E172B] border border-white/[0.08] rounded-xl p-3 flex items-center justify-between shadow-[0_4px_16px_rgba(5,10,24,0.6)]">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#0B0D10] border border-[#292E35] p-1 flex items-center justify-center overflow-hidden shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-[#050A18] border border-white/[0.08] p-1 flex items-center justify-center overflow-hidden shrink-0">
                   <img
                     src={activeChannel.logo}
                     alt={activeChannel.name}
@@ -777,23 +842,23 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white">{activeChannel.name}</h3>
+                    <h3 className="text-sm font-bold text-[#F5F7FF]">{activeChannel.name}</h3>
                     <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">
                       LIVE
                     </span>
                     {activeChannel.badge && (
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#F0B429]/15 text-[#F0B429] font-bold">
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#176BFF]/15 text-[#35A7FF] font-bold border border-[#35A7FF]/30">
                         {activeChannel.badge}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#9A9FA8] mt-0.5 truncate max-w-xs sm:max-w-md">
+                  <p className="text-xs text-[#8D9AB5] mt-0.5 truncate max-w-xs sm:max-w-md">
                     {activeChannel.currentProgram}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-xs font-mono text-gray-400">
+              <div className="flex items-center gap-2 text-xs font-mono text-[#8D9AB5]">
                 <span>{activeChannel.language}</span>
               </div>
             </div>
@@ -803,61 +868,20 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
           {!isFullscreen && (
             <div className="mt-2">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-gray-200">
+                <h3 className="text-sm font-bold text-[#F5F7FF]">
                   Channel Guide ({filteredChannels.length})
                 </h3>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
-                {filteredChannels.map((channel) => {
-                  const isActive = channel.id === activeChannel.id;
-                  return (
-                    <div
-                      key={channel.id}
-                      onClick={() => handleSelectChannel(channel)}
-                      className={`group relative flex flex-col justify-between p-3 rounded-xl transition-all cursor-pointer select-none border ${
-                        isActive
-                          ? 'bg-[#F0B429]/10 border-[#F0B429] shadow-[0_0_15px_rgba(240,180,41,0.25)]'
-                          : 'bg-[#15181D] hover:bg-[#1D2127] border-[#292E35] hover:border-gray-600'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="w-9 h-9 rounded-lg bg-[#0B0D10] border border-[#292E35] p-1 flex items-center justify-center overflow-hidden shrink-0">
-                          <img
-                            src={channel.logo}
-                            alt={channel.name}
-                            className="w-full h-full object-contain"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
-                          />
-                        </div>
-                        <div className="flex flex-col items-end">
-                          {isActive ? (
-                            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#F0B429] text-[#0B0D10] font-black uppercase tracking-wider animate-pulse">
-                              PLAYING
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-gray-400">
-                              {channel.quality}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h4 className={`text-xs font-bold truncate leading-tight transition-colors ${
-                          isActive ? 'text-[#F0B429]' : 'text-gray-200 group-hover:text-white'
-                        }`}>
-                          {channel.name}
-                        </h4>
-                        <p className="text-[10px] text-gray-400 truncate mt-1">
-                          {channel.currentProgram}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+                {filteredChannels.map((channel) => (
+                  <ChannelCard
+                    key={channel.id}
+                    channel={channel}
+                    isActive={channel.id === activeChannel.id}
+                    onSelect={handleSelectChannel}
+                  />
+                ))}
               </div>
             </div>
           )}

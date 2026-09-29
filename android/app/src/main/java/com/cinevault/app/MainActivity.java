@@ -76,7 +76,8 @@ public class MainActivity extends BridgeActivity {
     // ==========================================
     private static int localProxyPort = 0;
     private static ServerSocket localProxyServer = null;
-    private static final ExecutorService PROXY_EXECUTOR = Executors.newCachedThreadPool();
+    // Bound proxy thread pool to 4 workers to prevent socket thread explosion during rapid scrubbing
+    private static final ExecutorService PROXY_EXECUTOR = Executors.newFixedThreadPool(4);
 
     public static synchronized void ensureLocalProxyServer() {
         if (localProxyServer != null && !localProxyServer.isClosed() && localProxyPort > 0) {
@@ -604,15 +605,8 @@ public class MainActivity extends BridgeActivity {
                         return null;
                     }
 
-                    // Persistent Image Disk Cache:
-                    // Caches movie posters, backdrops, stills, and covers on disk so repeated scrolling
-                    // serves images instantly with 0 mobile data consumption and zero loading flicker.
-                    if (isImageRequest(request, urlLower, hostLower)) {
-                        WebResourceResponse imgResp = handleCachedImageRequest(request, urlStr, urlLower);
-                        if (imgResp != null) {
-                            return imgResp;
-                        }
-                    }
+                    // 3. Image requests delegate directly to Chromium's native HTTP disk cache
+                    // avoiding JNI binder context switching, disk-stat stalls, and main thread MD5 hashing overhead.
 
                     // Native MovieBox Stream & API Proxy
                     // MovieBox CDN (hakunaymatata.com, bcdn.biz, bytefuntimes) returns 429/403 unless Referer: https://mzfi.me/
@@ -661,80 +655,7 @@ public class MainActivity extends BridgeActivity {
             return super.shouldInterceptRequest(view, request);
         }
 
-        private static boolean isImageRequest(WebResourceRequest request, String urlLower, String hostLower) {
-            // NEVER treat video streams, audio, or JSON API requests as images
-            if (urlLower.contains(".mp4") || urlLower.contains("tran-audio") || urlLower.contains("proxy_video") ||
-                urlLower.contains(".m3u8") || urlLower.contains("/wefeed-h5api-bff/") || urlLower.contains("/subject/") ||
-                urlLower.contains(".json") || urlLower.contains("subjectid=")) {
-                return false;
-            }
-            if (urlLower.contains(".jpg") || urlLower.contains(".jpeg") || urlLower.contains(".png") ||
-                urlLower.contains(".webp") || urlLower.contains(".gif") || urlLower.contains(".svg") ||
-                urlLower.contains("/poster") || urlLower.contains("/cover") || urlLower.contains("/stills") ||
-                urlLower.contains("subject_cover") || urlLower.contains("subject_poster")) {
-                return true;
-            }
-            if (request != null && request.getRequestHeaders() != null) {
-                String accept = request.getRequestHeaders().get("Accept");
-                if (accept != null && accept.toLowerCase().startsWith("image/")) {
-                    return true;
-                }
-            }
-            return false;
-        }
 
-        private static String getImageMimeType(String urlLower) {
-            if (urlLower.contains(".webp")) return "image/webp";
-            if (urlLower.contains(".png")) return "image/png";
-            if (urlLower.contains(".gif")) return "image/gif";
-            if (urlLower.contains(".svg")) return "image/svg+xml";
-            return "image/jpeg";
-        }
-
-        private static String hashUrl(String url) {
-            try {
-                MessageDigest md = MessageDigest.getInstance("MD5");
-                byte[] digest = md.digest(url.getBytes("UTF-8"));
-                StringBuilder sb = new StringBuilder();
-                for (byte b : digest) {
-                    sb.append(String.format("%02x", b));
-                }
-                return sb.toString();
-            } catch (Exception e) {
-                return String.valueOf(Math.abs(url.hashCode()));
-            }
-        }
-
-        private static WebResourceResponse handleCachedImageRequest(WebResourceRequest request, String urlStr, String urlLower) {
-            if (appContext == null) return null;
-            try {
-                File cacheDir = new File(appContext.getCacheDir(), "poster_cache");
-                if (!cacheDir.exists()) {
-                    cacheDir.mkdirs();
-                }
-
-                String ext = urlLower.contains(".webp") ? ".webp" : (urlLower.contains(".png") ? ".png" : ".jpg");
-                String hash = hashUrl(urlStr);
-                File cachedFile = new File(cacheDir, hash + ext);
-
-                String mimeType = getImageMimeType(urlLower);
-
-                // 1. Return cached image instantly with 0ms delay and 0 network usage
-                if (cachedFile.exists() && cachedFile.length() > 0) {
-                    Map<String, String> headers = new HashMap<>();
-                    headers.put("Access-Control-Allow-Origin", "*");
-                    headers.put("Cache-Control", "public, max-age=2592000, immutable");
-                    headers.put("Content-Type", mimeType);
-                    headers.put("Content-Length", String.valueOf(cachedFile.length()));
-                    return new WebResourceResponse(mimeType, null, 200, "OK", headers, new FileInputStream(cachedFile));
-                }
-
-                // If not in disk cache yet, return null so Chromium's native C++ asynchronous network
-                // stack fetches it in the background without blocking the WebView thread pool.
-                return null;
-            } catch (Exception ignored) {}
-            return null;
-        }
 
         private static WebResourceResponse handleLocalMediaRequest(WebResourceRequest request) {
             try {

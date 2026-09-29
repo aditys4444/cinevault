@@ -7,8 +7,8 @@ android {
         applicationId "com.cinevault.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2670
-        versionName "2.6.7"
+        versionCode 2680
+        versionName "2.6.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

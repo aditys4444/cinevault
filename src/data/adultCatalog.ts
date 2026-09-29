@@ -370,6 +370,121 @@ export const ADULT_HOME_CATALOG: HomeCatalogResponse = {
       ]
     },
     {
+      "id": "adult_cinema",
+      "title": "\ud83c\udfac Uncensored Adult Movies & Erotic Cinema",
+      "badge": "18+ CINEMA",
+      "items": [
+        {
+          "id": "adult_cinema_001",
+          "title": "365 Days: This Day",
+          "detailPath": "365-days-this-day-uncut",
+          "overview": "Laura and Massimo are back and stronger than ever. But Massimo's family ties and a mysterious man bidding for Laura's heart complicate their lives.",
+          "poster": "https://pbcdnw.aoneroom.com/image/2026/01/26/23498f59fe9a8610e631c90175ab237e.jpg",
+          "backdrop": "https://pbcdnw.aoneroom.com/image/2026/01/26/23498f59fe9a8610e631c90175ab237e.jpg",
+          "release_year": 2022,
+          "rating": 8.6,
+          "genres": [
+            "18+",
+            "Adult",
+            "Romance",
+            "Drama"
+          ],
+          "duration": "1h 51m",
+          "media_type": "movie"
+        },
+        {
+          "id": "adult_cinema_002",
+          "title": "The Next 365 Days",
+          "detailPath": "the-next-365-days-uncut",
+          "overview": "Laura and Massimo's relationship hangs in the balance as they try to overcome trust issues, while a tenacious Nacho works to push them apart.",
+          "poster": "https://pbcdnw.aoneroom.com/image/2026/02/28/7c599da921d18e3aa936194761d8da7f.jpeg",
+          "backdrop": "https://pbcdnw.aoneroom.com/image/2026/02/28/7c599da921d18e3aa936194761d8da7f.jpeg",
+          "release_year": 2022,
+          "rating": 8.5,
+          "genres": [
+            "18+",
+            "Adult",
+            "Romance",
+            "Drama"
+          ],
+          "duration": "1h 52m",
+          "media_type": "movie"
+        },
+        {
+          "id": "adult_cinema_003",
+          "title": "Sex/Life [Complete Uncensored]",
+          "detailPath": "sex-life-uncensored",
+          "overview": "A suburban mother of two takes a fantasy-charged trip down memory lane that puts her very married present on a collision course with her wild-child past.",
+          "poster": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2023,
+          "rating": 8.7,
+          "genres": [
+            "18+",
+            "Adult",
+            "Drama",
+            "Romance"
+          ],
+          "duration": "14 eps",
+          "media_type": "series"
+        },
+        {
+          "id": "adult_cinema_004",
+          "title": "Fifty Shades of Grey [Unrated Extended Cut]",
+          "detailPath": "fifty-shades-of-grey-unrated",
+          "overview": "Literature student Anastasia Steele's life changes forever when she meets handsome, yet tormented, billionaire Christian Grey.",
+          "poster": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2015,
+          "rating": 8.4,
+          "genres": [
+            "18+",
+            "Adult",
+            "Romance",
+            "Drama"
+          ],
+          "duration": "2h 8m",
+          "media_type": "movie"
+        },
+        {
+          "id": "adult_cinema_005",
+          "title": "Wild Things [Unrated Director Cut]",
+          "detailPath": "wild-things-unrated",
+          "overview": "A high school guidance counselor is accused of rape by two wealthy female students, triggering an explosive erotic noir investigation in Miami.",
+          "poster": "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2018,
+          "rating": 8.5,
+          "genres": [
+            "18+",
+            "Adult",
+            "Thriller",
+            "Mystery"
+          ],
+          "duration": "1h 55m",
+          "media_type": "movie"
+        },
+        {
+          "id": "adult_cinema_006",
+          "title": "The Voyeurs [Uncensored 18+]",
+          "detailPath": "the-voyeurs-uncensored",
+          "overview": "Pippa and Thomas move into their dream apartment and discover that their windows look directly into the apartment opposite, inviting obsession.",
+          "poster": "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2021,
+          "rating": 8.4,
+          "genres": [
+            "18+",
+            "Adult",
+            "Mystery",
+            "Thriller"
+          ],
+          "duration": "1h 56m",
+          "media_type": "movie"
+        }
+      ]
+    },
+    {
       "id": "adult_desi",
       "title": "\ud83c\udf36\ufe0f Desi 18+ Web Series & Originals",
       "badge": "DESI 18+",
@@ -2135,9 +2250,167 @@ export const ADULT_HOME_CATALOG: HomeCatalogResponse = {
           "media_type": "movie"
         }
       ]
+    },
+    {
+      "id": "adult_anime",
+      "title": "\ud83d\udd1e 18+ Adult Anime & Uncensored Hentai",
+      "badge": "18+ ANIME",
+      "items": [
+        {
+          "id": "adult_anime_001",
+          "title": "Overflow [Uncensored]",
+          "detailPath": "overflow-uncensored-anime",
+          "overview": "College student Kazushi Sudou gets unexpected visits from his childhood friend sisters Ayane and Kotone Shirakawa in a romantic erotic situation.",
+          "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2020,
+          "rating": 8.9,
+          "genres": [
+            "18+",
+            "Adult",
+            "Anime",
+            "Hentai",
+            "Romance"
+          ],
+          "duration": "8 eps",
+          "media_type": "series"
+        },
+        {
+          "id": "adult_anime_002",
+          "title": "High School DxD [Uncensored 18+]",
+          "detailPath": "high-school-dxd-uncensored",
+          "overview": "Issei Hyoudou is a lecherous high school student who is killed on his first date, only to be revived as a devil by the beautiful crimson-haired Rias Gremory.",
+          "poster": "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2021,
+          "rating": 8.7,
+          "genres": [
+            "18+",
+            "Adult",
+            "Anime",
+            "Action",
+            "Supernatural"
+          ],
+          "duration": "12 eps",
+          "media_type": "series"
+        },
+        {
+          "id": "adult_anime_003",
+          "title": "Redo of Healer [Complete Uncut]",
+          "detailPath": "redo-of-healer-uncensored",
+          "overview": "In a dark world of betrayal, healing magician Keyaru awakens his power to rewind time and take ruthless vengeance on those who wronged him.",
+          "poster": "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2021,
+          "rating": 8.6,
+          "genres": [
+            "18+",
+            "Adult",
+            "Anime",
+            "Dark Fantasy",
+            "Thriller"
+          ],
+          "duration": "12 eps",
+          "media_type": "series"
+        },
+        {
+          "id": "adult_anime_004",
+          "title": "Kuroinu: Kedakaki Seija [18+ Hentai]",
+          "detailPath": "kuroinu-kedakaki-seija-18plus",
+          "overview": "The mercenary company of the Black Dogs launches an assault against the Seven Shields Alliance in this classic dark fantasy adult anime saga.",
+          "poster": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2019,
+          "rating": 8.8,
+          "genres": [
+            "18+",
+            "Adult",
+            "Anime",
+            "Hentai",
+            "Fantasy"
+          ],
+          "duration": "6 eps",
+          "media_type": "series"
+        },
+        {
+          "id": "adult_anime_005",
+          "title": "Bible Black [Uncut Remastered]",
+          "detailPath": "bible-black-uncut",
+          "overview": "High school student Minagawa discovers a forbidden grimoire hidden in the school basement, unleashing supernatural occult desires.",
+          "poster": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2018,
+          "rating": 8.5,
+          "genres": [
+            "18+",
+            "Adult",
+            "Anime",
+            "Hentai",
+            "Horror"
+          ],
+          "duration": "6 eps",
+          "media_type": "series"
+        },
+        {
+          "id": "adult_anime_006",
+          "title": "Kiss x Sis [Complete OVA 18+]",
+          "detailPath": "kiss-x-sis-ova-uncut",
+          "overview": "Keita Suminoe navigates living with his two twin step-sisters Ako and Riko in this provocative, uncensored adult romantic comedy.",
+          "poster": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2020,
+          "rating": 8.4,
+          "genres": [
+            "18+",
+            "Adult",
+            "Anime",
+            "Romance",
+            "Comedy"
+          ],
+          "duration": "12 eps",
+          "media_type": "series"
+        },
+        {
+          "id": "adult_anime_007",
+          "title": "Prison School [Uncensored 18+]",
+          "detailPath": "prison-school-uncensored",
+          "overview": "Hachimitsu Academy's newly admitted male students get sent to the school underground prison monitored by the strict Underground Student Council.",
+          "poster": "https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2018,
+          "rating": 8.6,
+          "genres": [
+            "18+",
+            "Adult",
+            "Anime",
+            "Comedy"
+          ],
+          "duration": "12 eps",
+          "media_type": "series"
+        },
+        {
+          "id": "adult_anime_008",
+          "title": "Aki Sora [Uncut 18+]",
+          "detailPath": "aki-sora-uncut",
+          "overview": "Sora Aoi is deeply devoted to his older sister Aki, leading to intense and forbidden boundaries being broken in secret.",
+          "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=600&q=80",
+          "backdrop": "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=1200&q=80",
+          "release_year": 2019,
+          "rating": 8.3,
+          "genres": [
+            "18+",
+            "Adult",
+            "Anime",
+            "Hentai",
+            "Romance"
+          ],
+          "duration": "3 eps",
+          "media_type": "series"
+        }
+      ]
     }
   ],
-  "total_titles": 116
+  "total_titles": 131
 };
 
 // Pre-built Set of ALL adult content IDs for instant O(1) filtering
@@ -2156,24 +2429,122 @@ const _collectAdultIds = (): Set<string> => {
 
 export const ADULT_CONTENT_IDS: Set<string> = _collectAdultIds();
 
-// Genre keywords that indicate adult/18+ content
-const ADULT_GENRE_KEYWORDS = ['18+', 'adult', 'erotic', 'erotica', 'uncensored', 'xxx'];
+// Comprehensive list of adult/18+/pornographic keywords, web series, and studios
+export const ADULT_KEYWORDS: string[] = [
+  '18+',
+  'adult',
+  'erotic',
+  'erotica',
+  'porn',
+  'porno',
+  'pornography',
+  'xxx',
+  'hentai',
+  'uncensored',
+  'uncut',
+  'softcore',
+  'hardcore',
+  'sensual',
+  'sex',
+  'sexy',
+  'nude',
+  'nudity',
+  'ullu',
+  'kooku',
+  'primeshots',
+  'hotx',
+  'voovi',
+  'cineprime',
+  'rabbit',
+  'fliz',
+  'charmsukh',
+  'palang tod',
+  'kavita bhabhi',
+  'gandii baat',
+  'mastram',
+  'riti riwaj',
+  'jane anjane mein',
+  'chull',
+  'bhabhi',
+  '365 days',
+  'sex/life',
+  'fifty shades',
+  'lust stories',
+  'overflow uncensored',
+  'redo of healer',
+  'kuroinu',
+  'bible black',
+  'aki sora',
+  'kiss x sis',
+  'ecchi',
+  'nsfw',
+  'seduction',
+  'desires',
+  'apharan',
+  'hotshots',
+  'kamakhya',
+  'antarvasna',
+];
 
 /**
- * Returns true if a movie should be considered 18+ content.
- * Checks both the curated adult ID list AND genre tags.
+ * Returns true if a search suggestion contains any pornography, 18+, or adult keyword.
+ * Used on the standard (first) page so pornography suggestions are 100% hidden.
  */
-export function isAdultContent(movie: { id: string; genres?: string[]; title?: string }): boolean {
+export function isAdultSearchTerm(term: string): boolean {
+  if (!term) return false;
+  const lower = term.toLowerCase().trim();
+  for (const kw of ADULT_KEYWORDS) {
+    if (lower === kw) return true;
+    if (kw.includes(' ') && lower.includes(kw)) return true;
+    if (kw.length >= 3 && lower.includes(kw)) return true;
+  }
+  return false;
+}
+
+/**
+ * Returns true if a movie should be considered 18+/adult content.
+ * Checks ID match, genre tags, title keywords, and overview terms.
+ */
+export function isAdultContent(movie: { id?: string; title?: string; genres?: string[]; overview?: string }): boolean {
+  if (!movie) return false;
+
   // 1. Direct ID match against curated adult catalog
-  if (ADULT_CONTENT_IDS.has(movie.id)) return true;
+  if (movie.id && ADULT_CONTENT_IDS.has(String(movie.id))) return true;
+
   // 2. Genre-based detection
   if (movie.genres && movie.genres.length > 0) {
     for (const genre of movie.genres) {
       const g = genre.toLowerCase();
-      for (const keyword of ADULT_GENRE_KEYWORDS) {
+      for (const keyword of ADULT_KEYWORDS) {
         if (g === keyword || g.includes(keyword)) return true;
       }
     }
   }
+
+  // 3. Title-based adult keyword detection (prevents API leakage of un-tagged 18+ titles)
+  if (movie.title) {
+    const titleLower = movie.title.toLowerCase();
+    for (const keyword of ADULT_KEYWORDS) {
+      if (keyword.length >= 3 && titleLower.includes(keyword)) {
+        return true;
+      }
+    }
+  }
+
+  // 4. Overview/Synopsis explicit indicator detection
+  if (movie.overview) {
+    const ovLower = movie.overview.toLowerCase();
+    if (
+      ovLower.includes('uncensored 18+') ||
+      ovLower.includes('explicit adult') ||
+      ovLower.includes('18+ adult drama') ||
+      ovLower.includes('erotic drama') ||
+      ovLower.includes('hentai') ||
+      ovLower.includes('softcore')
+    ) {
+      return true;
+    }
+  }
+
   return false;
 }

@@ -19,7 +19,6 @@ interface NavItemProps {
 
 const NavItem: React.FC<NavItemProps> = memo(({ icon, label, isActive, badge, isLive, onClick }) => {
   const handleTap = useCallback(() => {
-    // Haptic feedback for native feel — non-blocking
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
     onClick();
   }, [onClick]);
@@ -28,37 +27,24 @@ const NavItem: React.FC<NavItemProps> = memo(({ icon, label, isActive, badge, is
     <button
       type="button"
       onClick={handleTap}
-      className={`relative flex flex-col items-center justify-center flex-1 max-w-[72px] min-h-[48px] px-1 rounded-2xl transition-colors duration-150 cursor-pointer press-feedback ${
+      aria-label={label}
+      className={`relative flex items-center justify-center p-2.5 rounded-full transition-all duration-200 cursor-pointer active:scale-90 press-feedback ${
         isActive
-          ? 'text-[#F0B429]'
-          : 'text-[#6B7280] active:text-[#F5F5F2]'
+          ? 'bg-gradient-to-tr from-[#176BFF] to-[#35A7FF] text-white shadow-[0_0_16px_rgba(23,107,255,0.65)]'
+          : 'text-[#94A3B8] hover:text-white hover:bg-white/[0.06]'
       }`}
     >
-      {/* Active indicator pill (Material 3 style) */}
-      {isActive && (
-        <span className="absolute top-1 left-1/2 -translate-x-1/2 w-8 h-[3px] rounded-full bg-[#F0B429] animate-scale-in" />
-      )}
-
       {/* Icon with badge */}
       <span className="relative flex items-center justify-center">
         {icon}
-        {isLive && (
-          <span className="absolute -top-1.5 -right-3 px-1 py-[0.5px] bg-red-600 text-white text-[7.5px] font-black tracking-wider uppercase rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.7)] leading-none">
-            LIVE
-          </span>
+        {isLive && !isActive && (
+          <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444] animate-pulse" />
         )}
         {badge != null && badge > 0 && (
-          <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold bg-[#F0B429] text-[#0B0D10] leading-[16px] text-center">
+          <span className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] px-1 rounded-full text-[8.5px] font-bold bg-[#00D2FF] text-black leading-[15px] text-center shadow-sm">
             {badge > 99 ? '99+' : badge}
           </span>
         )}
-      </span>
-
-      {/* Label */}
-      <span className={`text-[10px] mt-0.5 font-semibold tracking-wide transition-colors duration-150 ${
-        isActive ? 'text-[#F0B429]' : 'text-[#6B7280]'
-      }`}>
-        {label}
       </span>
     </button>
   );
@@ -73,19 +59,26 @@ export const BottomNav: React.FC<BottomNavProps> = memo(({
 }) => {
   return (
     <nav
-      className="fixed bottom-0 left-0 w-full z-40 md:hidden bg-[#0B0D10]/95 backdrop-blur-md border-t border-[#292E35]/60 flex items-center justify-around sm:justify-center sm:gap-2 px-1.5 pt-1 shadow-[0_-4px_16px_rgba(0,0,0,0.4)] bottom-nav-safe"
+      className="fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-40 md:hidden w-[90%] max-w-sm px-3 py-2 rounded-full bg-[#0E1726]/85 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_18px_rgba(23,107,255,0.25)] flex items-center justify-between"
       role="tablist"
       aria-label="Main navigation"
     >
       <NavItem
-        icon={<Film className={`w-[21px] h-[21px] ${activeView === 'home' ? 'stroke-[2.2]' : 'stroke-[1.8]'}`} />}
+        icon={<Film className="w-5 h-5" />}
         label="Vault"
         isActive={activeView === 'home'}
         onClick={() => onNavigate('home')}
       />
 
       <NavItem
-        icon={<Tv className={`w-[21px] h-[21px] ${activeView === 'livetv' ? 'stroke-[2.2]' : 'stroke-[1.8]'}`} />}
+        icon={<Search className="w-5 h-5" />}
+        label="Explore"
+        isActive={false}
+        onClick={onOpenSearch}
+      />
+
+      <NavItem
+        icon={<Tv className="w-5 h-5" />}
         label="Live TV"
         isActive={activeView === 'livetv'}
         isLive={true}
@@ -93,14 +86,7 @@ export const BottomNav: React.FC<BottomNavProps> = memo(({
       />
 
       <NavItem
-        icon={<Search className="w-[21px] h-[21px] stroke-[1.8]" />}
-        label="Explore"
-        isActive={false}
-        onClick={onOpenSearch}
-      />
-
-      <NavItem
-        icon={<Download className={`w-[21px] h-[21px] ${activeView === 'downloads' ? 'stroke-[2.2]' : 'stroke-[1.8]'}`} />}
+        icon={<Download className="w-5 h-5" />}
         label="Downloads"
         isActive={activeView === 'downloads'}
         badge={downloadCount}
@@ -108,7 +94,7 @@ export const BottomNav: React.FC<BottomNavProps> = memo(({
       />
 
       <NavItem
-        icon={<Award className={`w-[21px] h-[21px] ${activeView === 'profile' ? 'stroke-[2.2]' : 'stroke-[1.8]'}`} />}
+        icon={<Award className="w-5 h-5" />}
         label="Privé"
         isActive={activeView === 'profile'}
         onClick={() => onNavigate('profile')}

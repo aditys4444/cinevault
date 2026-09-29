@@ -27,7 +27,233 @@ import {
   SunDim,
   Volume1,
   Scan,
+  Lock,
+  Unlock,
 } from 'lucide-react';
+
+// Format Time (hh:mm:ss or mm:ss)
+const formatTime = (secs: number) => {
+  if (isNaN(secs) || secs < 0) return '00:00';
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = Math.floor(secs % 60);
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+interface PlaybackProgressProps {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  triggerShowControls: () => void;
+  commitSeek: (target: number) => void;
+}
+
+export const PlaybackProgress: React.FC<PlaybackProgressProps> = memo(({
+  videoRef,
+  triggerShowControls,
+  commitSeek,
+}) => {
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
+  const [bufferedPercent, setBufferedPercent] = useState<number>(0);
+  const [scrubTime, setScrubTime] = useState<number | null>(null);
+  const isScrubbingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let lastSec = -1;
+
+    const onTimeUpdate = () => {
+      if (isScrubbingRef.current) return;
+      const cur = video.currentTime;
+      const curSec = Math.floor(cur);
+      if (curSec !== lastSec) {
+        lastSec = curSec;
+        setCurrentTime(cur);
+      }
+    };
+
+    const onDuration = () => {
+      if (video.duration && !isNaN(video.duration) && video.duration > 0) {
+        setDuration(video.duration);
+      }
+    };
+
+    const onProgress = () => {
+      const buf = video.buffered;
+      if (buf.length > 0 && video.duration > 0) {
+        let relevantEnd = buf.end(buf.length - 1);
+        for (let i = 0; i < buf.length; i++) {
+          if (video.currentTime >= buf.start(i) && video.currentTime <= buf.end(i)) {
+            relevantEnd = buf.end(i);
+            break;
+          }
+        }
+        const newPct = (relevantEnd / video.duration) * 100;
+        setBufferedPercent((prev) => (Math.abs(newPct - prev) >= 2 ? newPct : prev));
+      }
+    };
+
+    video.addEventListener('timeupdate', onTimeUpdate, { passive: true });
+    video.addEventListener('loadedmetadata', onDuration, { passive: true });
+    video.addEventListener('durationchange', onDuration, { passive: true });
+    video.addEventListener('progress', onProgress, { passive: true });
+    video.addEventListener('seeked', onTimeUpdate, { passive: true });
+
+    if (video.duration) setDuration(video.duration);
+    if (video.currentTime) setCurrentTime(video.currentTime);
+
+    return () => {
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('loadedmetadata', onDuration);
+      video.removeEventListener('durationchange', onDuration);
+      video.removeEventListener('progress', onProgress);
+      video.removeEventListener('seeked', onTimeUpdate);
+    };
+  }, [videoRef]);
+
+  const activeTime = scrubTime !== null ? scrubTime : currentTime;
+  const progressPercent = duration > 0 ? (activeTime / duration) * 100 : 0;
+
+  const handlePointerDown = () => {
+    isScrubbingRef.current = true;
+    triggerShowControls();
+  };
+
+  const handleSeekChange = (val: number) => {
+    setScrubTime(val);
+    triggerShowControls();
+  };
+
+  const handlePointerUp = (val: number) => {
+    isScrubbingRef.current = false;
+    setScrubTime(null);
+    setCurrentTime(val);
+    commitSeek(val);
+  };
+
+  return (
+    <div className="relative w-full h-8 flex items-center select-none cursor-pointer">
+      <div className="relative w-full h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden pointer-events-none">
+        {/* Buffered Lookahead Bar */}
+        <div
+          className="absolute h-full bg-white/35 rounded-full"
+          style={{ width: `${bufferedPercent}%` }}
+        />
+        {/* Active Progress Bar */}
+        <div
+          className="absolute h-full bg-gradient-to-r from-[#176BFF] to-[#35A7FF] rounded-full shadow-[0_0_8px_rgba(53,167,255,0.6)]"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+
+      {/* Native Scrub Range Input */}
+      <input
+        type="range"
+        min={0}
+        max={duration || 100}
+        step={0.1}
+        value={activeTime}
+        onPointerDown={handlePointerDown}
+        onChange={(e) => handleSeekChange(parseFloat(e.target.value))}
+        onPointerUp={(e) => handlePointerUp(parseFloat(e.currentTarget.value))}
+        onPointerCancel={() => {
+          isScrubbingRef.current = false;
+          setScrubTime(null);
+          commitSeek(videoRef.current?.currentTime || 0);
+        }}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 touch-none"
+      />
+    </div>
+  );
+});
+
+PlaybackProgress.displayName = 'PlaybackProgress';
+
+interface PlaybackTimeProps {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+}
+
+export const PlaybackTime: React.FC<PlaybackTimeProps> = memo(({ videoRef }) => {
+  const [time, setTime] = useState({ current: 0, duration: 0 });
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let lastSec = -1;
+
+    const onUpdate = () => {
+      const cur = Math.floor(video.currentTime);
+      const dur = Math.floor(video.duration || 0);
+      if (cur !== lastSec || dur !== Math.floor(time.duration)) {
+        lastSec = cur;
+        setTime({ current: video.currentTime, duration: video.duration || 0 });
+      }
+    };
+
+    video.addEventListener('timeupdate', onUpdate, { passive: true });
+    video.addEventListener('loadedmetadata', onUpdate, { passive: true });
+    video.addEventListener('durationchange', onUpdate, { passive: true });
+    video.addEventListener('seeked', onUpdate, { passive: true });
+
+    onUpdate();
+
+    return () => {
+      video.removeEventListener('timeupdate', onUpdate);
+      video.removeEventListener('loadedmetadata', onUpdate);
+      video.removeEventListener('durationchange', onUpdate);
+      video.removeEventListener('seeked', onUpdate);
+    };
+  }, [videoRef]);
+
+  return (
+    <span className="font-mono text-[11px] sm:text-xs text-gray-300 select-none">
+      {formatTime(time.current)} / {formatTime(time.duration)}
+    </span>
+  );
+});
+
+PlaybackTime.displayName = 'PlaybackTime';
+
+export const MiniPlaybackProgress: React.FC<{ videoRef: React.RefObject<HTMLVideoElement | null> }> = memo(({ videoRef }) => {
+  const [percent, setPercent] = useState<number>(0);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let lastSec = -1;
+
+    const onUpdate = () => {
+      const cur = Math.floor(video.currentTime);
+      if (cur !== lastSec && video.duration > 0) {
+        lastSec = cur;
+        setPercent((video.currentTime / video.duration) * 100);
+      }
+    };
+
+    video.addEventListener('timeupdate', onUpdate, { passive: true });
+    video.addEventListener('loadedmetadata', onUpdate, { passive: true });
+    onUpdate();
+
+    return () => {
+      video.removeEventListener('timeupdate', onUpdate);
+      video.removeEventListener('loadedmetadata', onUpdate);
+    };
+  }, [videoRef]);
+
+  return (
+    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/[0.08] overflow-hidden">
+      <div className="h-full bg-gradient-to-r from-[#176BFF] to-[#35A7FF] shadow-[0_0_8px_rgba(53,167,255,0.6)] transition-all" style={{ width: `${percent}%` }} />
+    </div>
+  );
+});
+
+MiniPlaybackProgress.displayName = 'MiniPlaybackProgress';
 
 interface VideoPlayerProps {
   movie: Movie;
@@ -78,9 +304,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isBuffering, setIsBuffering] = useState<boolean>(false);
-  const [currentTime, setCurrentTime] = useState<number>(0);
-  const [duration, setDuration] = useState<number>(0);
-  const [bufferedPercent, setBufferedPercent] = useState<number>(0);
   const [volume, setVolume] = useState<number>(1);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -95,7 +318,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   const [isQualityMenuOpen, setIsQualityMenuOpen] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState<boolean>(false);
-  const [scrubTime, setScrubTime] = useState<number | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState<number>(0);
 
@@ -110,13 +332,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   });
   const [fitMode, setFitMode] = useState<'contain' | 'cover' | 'fill'>(() => {
     try {
-      return (localStorage.getItem('cinevault_player_fit') as any) || 'contain';
+      const saved = localStorage.getItem('cinevault_player_fit');
+      if (saved === 'contain' || saved === 'cover' || saved === 'fill') return saved;
+      return 'cover';
     } catch {
-      return 'contain';
+      return 'cover';
     }
   });
   const [activeGesture, setActiveGesture] = useState<'brightness' | 'volume' | null>(null);
   const [gestureValue, setGestureValue] = useState<number>(100);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [showUnlockPrompt, setShowUnlockPrompt] = useState<boolean>(false);
+  const unlockPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Core Refs for Atomic Playback & Seeking Lifecycle
   const containerRef = useRef<HTMLDivElement>(null);
@@ -143,6 +370,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     initialVal: number;
     hasMoved: boolean;
   } | null>(null);
+  const lastTapRef = useRef<number>(0);
 
   const isTv = useMemo(() => {
     if (currentMovie.media_type === 'movie') return false;
@@ -299,8 +527,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     const video = videoRef.current;
     if (video && video.currentTime > 0) {
       savedPositionRef.current = video.currentTime;
-    } else {
-      savedPositionRef.current = currentTime;
     }
 
     let nextMovie: Movie | null = variantMovie || null;
@@ -342,7 +568,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     setIsLanguageMenuOpen(false);
     showToast(`Audio changed to ${targetLang}`);
     onMovieChange?.(nextMovie);
-  }, [selectedLanguage, currentMovie, currentSeason, languageVariants, currentTime, showToast, onMovieChange]);
+  }, [selectedLanguage, currentMovie, currentSeason, languageVariants, showToast, onMovieChange]);
 
   // Fullscreen & Android Landscape Orientation Handlers
   const enterLandscape = useCallback(() => {
@@ -385,8 +611,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         enterLandscape();
       } else {
         exitLandscape();
-        // Reset fit mode to safe default when returning to portrait
-        setFitMode('contain');
       }
       return next;
     });
@@ -397,18 +621,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     const handleOrientation = () => {
       const isLandscape = window.innerWidth > window.innerHeight;
       setIsFullscreen(isLandscape);
-      // When rotating back to portrait, reset fit to 'contain' so video isn't zoomed
-      if (!isLandscape) {
-        setFitMode('contain');
+      if (isLandscape && !isMinimized) {
+        if (typeof window !== 'undefined' && (window as any).AndroidDevice?.setFullscreen) {
+          (window as any).AndroidDevice.setFullscreen(true);
+        }
       }
     };
+    handleOrientation();
     window.addEventListener('resize', handleOrientation);
     window.addEventListener('orientationchange', handleOrientation);
     return () => {
       window.removeEventListener('resize', handleOrientation);
       window.removeEventListener('orientationchange', handleOrientation);
     };
-  }, []);
+  }, [isMinimized]);
 
   // Intercept Android hardware Back button when in VideoPlayer
   useEffect(() => {
@@ -673,32 +899,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     triggerShowControls();
   }, [safePlay, safePause, triggerShowControls]);
 
-  // SEAMLESS RANGE SEEKING (Preserves decoder stream pipeline without stalling)
-  const handleSeekStart = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    wasPlayingBeforeSeekRef.current = !video.paused;
-    // NOTE: We do NOT force video.pause() here!
-    // Keeping the media element's play state allows Chromium to eagerly stream
-    // and decode the target keyframe without putting the media pipeline into a dormant state.
-    isSeekingRef.current = true;
-  }, []);
-
-  const handleSeekChange = useCallback((targetTime: number) => {
-    setScrubTime(targetTime);
-    triggerShowControls();
-  }, [triggerShowControls]);
-
   const commitSeek = useCallback((targetTime: number) => {
     const video = videoRef.current;
     if (!video) return;
 
     const maxDuration = (video.duration && !isNaN(video.duration) && video.duration > 0) ? video.duration : targetTime;
     const validTarget = Math.max(0, Math.min(maxDuration, targetTime));
-
-    setScrubTime(null);
-    setCurrentTime(validTarget);
 
     if (seekWatchdogRef.current) clearTimeout(seekWatchdogRef.current);
 
@@ -750,7 +956,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
     isSeekingRef.current = false;
     setIsBuffering(false);
-    setCurrentTime(video.currentTime);
 
     // Automatically resume playback if it was playing prior to seek
     if (wasPlayingBeforeSeekRef.current) {
@@ -772,12 +977,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     const dur = video.duration || 0;
     const baseTime = pendingSkipTargetRef.current !== null
       ? pendingSkipTargetRef.current
-      : (scrubTime !== null ? scrubTime : video.currentTime);
+      : video.currentTime;
     const target = Math.max(0, Math.min(dur, baseTime + seconds));
 
     pendingSkipTargetRef.current = target;
-    setScrubTime(target);
-    setCurrentTime(target);
     wasPlayingBeforeSeekRef.current = !video.paused;
 
     if (skipDebounceTimerRef.current) {
@@ -793,14 +996,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         commitSeek(finalTarget);
       }
     }, 120);
-  }, [scrubTime, commitSeek, triggerShowControls]);
+  }, [commitSeek, triggerShowControls]);
   // Video Element Native Event Handlers
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     if (!video) return;
 
     // While seek is in progress, ignore premature timeupdate events from position jump
-    if (isSeekingRef.current || video.seeking || scrubTime !== null) {
+    if (isSeekingRef.current || video.seeking) {
       return;
     }
 
@@ -811,10 +1014,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       setIsBuffering(false);
     }
 
-    // Throttle React state updates to 1Hz for smooth 60fps performance
+    // Throttled watch progress save to local storage (0 React re-renders during playback)
     if (currSec !== lastSecondRef.current) {
       lastSecondRef.current = currSec;
-      setCurrentTime(curr);
 
       // Save watch progress to local storage every 15 seconds to prevent I/O micro-stutters
       // (Suppress during initial 5 seconds of stream startup to avoid main-thread disk write lag)
@@ -827,20 +1029,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
           isTv ? currentEpisode : undefined
         );
       }
-
-      // Buffer percentage calculation for timeline throttled to 1Hz with 3% threshold
-      const buf = video.buffered;
-      if (buf.length > 0 && video.duration > 0) {
-        let relevantEnd = buf.end(buf.length - 1);
-        for (let i = 0; i < buf.length; i++) {
-          if (curr >= buf.start(i) && curr <= buf.end(i)) {
-            relevantEnd = buf.end(i);
-            break;
-          }
-        }
-        const newPct = (relevantEnd / video.duration) * 100;
-        setBufferedPercent((prev) => (Math.abs(newPct - prev) >= 3 ? newPct : prev));
-      }
     }
   };
 
@@ -848,7 +1036,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     const video = videoRef.current;
     if (!video) return;
 
-    setDuration(video.duration);
     setIsBuffering(false);
 
     // Restore position if quality or language was changed or reconnecting
@@ -927,7 +1114,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   const handlePause = () => {
     const video = videoRef.current;
     // CRITICAL: Ignore browser internal pause events while seeking or jumping timestamps!
-    if (isSeekingRef.current || video?.seeking || scrubTime !== null || pendingSkipTargetRef.current !== null) {
+    if (isSeekingRef.current || video?.seeking || pendingSkipTargetRef.current !== null) {
       return;
     }
 
@@ -968,7 +1155,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     // Auto-Recovery: retry with refreshed stream tokens (signed CDN URLs)
     if (autoRetryCountRef.current < 3) {
       autoRetryCountRef.current += 1;
-      savedPositionRef.current = (video && video.currentTime > 0) ? video.currentTime : currentTime;
+      savedPositionRef.current = (video && video.currentTime > 0) ? video.currentTime : savedPositionRef.current;
       setIsBuffering(true);
 
       try {
@@ -998,8 +1185,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   const handleSelectQuality = (qualityName: string) => {
     if (videoRef.current && videoRef.current.currentTime > 0) {
       savedPositionRef.current = videoRef.current.currentTime;
-    } else {
-      savedPositionRef.current = currentTime;
     }
     try {
       localStorage.setItem('cinevault_preferred_quality', qualityName);
@@ -1061,6 +1246,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       onRestore?.();
       return;
     }
+    if (isLocked) {
+      queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(6); });
+      setShowUnlockPrompt(true);
+      if (unlockPromptTimerRef.current) clearTimeout(unlockPromptTimerRef.current);
+      unlockPromptTimerRef.current = setTimeout(() => {
+        setShowUnlockPrompt(false);
+      }, 3000);
+      showToast('Screen is Locked • Tap Unlock to restore');
+      return;
+    }
     if (isQualityMenuOpen || isSpeedMenuOpen || isEpisodesMenuOpen || isLanguageMenuOpen) {
       setIsQualityMenuOpen(false);
       setIsSpeedMenuOpen(false);
@@ -1068,6 +1263,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       setIsLanguageMenuOpen(false);
       return;
     }
+
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      lastTapRef.current = 0;
+      cycleFitMode();
+      return;
+    }
+    lastTapRef.current = now;
+
     if (showControls) {
       setShowControls(false);
     } else {
@@ -1075,19 +1279,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     }
   };
 
-  // Format Time (hh:mm:ss or mm:ss)
-  const formatTime = (secs: number) => {
-    if (isNaN(secs) || secs < 0) return '00:00';
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = Math.floor(secs % 60);
-    if (h > 0) {
-      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
 
-  const progressPercent = duration > 0 ? (((scrubTime !== null ? scrubTime : currentTime)) / duration) * 100 : 0;
 
   // Active episodes list for TV series based on browsingSeason
   const activeSeasonObj = allSeasons.find((s) => s.season_number === browsingSeason) || allSeasons.find((s) => s.season_number === currentSeason) || allSeasons[0];
@@ -1117,9 +1309,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
     // Reset position to 0 so the new episode starts from the beginning
     savedPositionRef.current = 0;
-    setCurrentTime(0);
-    setDuration(0);
-    setBufferedPercent(0);
     setStreamInfo(null);
     setLoading(true);
     setError(null);
@@ -1154,7 +1343,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     }
   }, [isTv, allSeasons, currentSeason, currentEpisode, handleSelectSeasonAndEpisode, showToast]);
 
-  // Aspect Ratio Fit Mode Cycler (Fit -> Zoom -> Stretch)
+  // Aspect Ratio Fit Mode Cycler (Fit Screen -> Full Screen -> Fill Screen)
   const cycleFitMode = useCallback(() => {
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
     setFitMode((prev) => {
@@ -1162,13 +1351,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       let label = '';
       if (prev === 'contain') {
         next = 'cover';
-        label = 'Screen Fit: Zoom / Fill (No Black Bars)';
+        label = 'Full Screen';
       } else if (prev === 'cover') {
         next = 'fill';
-        label = 'Screen Fit: Stretch (Full Screen)';
+        label = 'Fill Screen';
       } else {
         next = 'contain';
-        label = 'Screen Fit: Original (Fit)';
+        label = 'Fit Screen';
       }
       try {
         localStorage.setItem('cinevault_player_fit', next);
@@ -1178,27 +1367,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     });
   }, [showToast]);
 
-  // Touch Gesture Handlers for Brightness (Left half) and Volume (Right half) in Landscape/Fullscreen
+  // Touch Gesture Handlers for Brightness (Left half) and Volume (Right half)
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (isMinimized || e.touches.length !== 1) return;
+    if (isMinimized || isLocked || e.touches.length !== 1) return;
     const touch = e.touches[0];
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const x = touch.clientX - rect.left;
 
-    const isLandscape = window.innerWidth > window.innerHeight || isFullscreen;
-
     let side: 'left' | 'right' | 'center' = 'center';
     let initialVal = 1;
-    if (isLandscape) {
-      if (x < rect.width * 0.45) {
-        side = 'left';
-        initialVal = brightness;
-      } else if (x > rect.width * 0.55) {
-        side = 'right';
-        const v = videoRef.current ? videoRef.current.volume : volume;
-        initialVal = isMuted ? 0 : v;
-      }
+    if (x < rect.width * 0.45) {
+      side = 'left';
+      initialVal = brightness;
+    } else if (x > rect.width * 0.55) {
+      side = 'right';
+      const v = videoRef.current ? videoRef.current.volume : volume;
+      initialVal = isMuted ? 0 : v;
     }
 
     touchStartPosRef.current = {
@@ -1208,10 +1393,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       initialVal,
       hasMoved: false,
     };
-  }, [isMinimized, isFullscreen, brightness, volume, isMuted]);
+  }, [isMinimized, isLocked, brightness, volume, isMuted]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (!touchStartPosRef.current || e.touches.length !== 1) return;
+    if (isLocked || !touchStartPosRef.current || e.touches.length !== 1) return;
     const touch = e.touches[0];
     const { startX, startY, side, initialVal } = touchStartPosRef.current;
     if (side === 'center') return;
@@ -1233,8 +1418,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
     if (gestureTimeoutRef.current) {
       clearTimeout(gestureTimeoutRef.current);
-      gestureTimeoutRef.current = null;
     }
+    // Watchdog timer: automatically fades out gesture HUD after 1.2s of inactivity
+    gestureTimeoutRef.current = setTimeout(() => {
+      setActiveGesture(null);
+    }, 1200);
 
     if (side === 'left') {
       // Clamp brightness between 10% (0.1) and 100% (1.0)
@@ -1267,12 +1455,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   }, [isMuted]);
 
   const handleTouchEnd = useCallback(() => {
-    if (touchStartPosRef.current?.hasMoved) {
-      if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
-      gestureTimeoutRef.current = setTimeout(() => {
-        setActiveGesture(null);
-      }, 1000);
-    }
+    if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
+    gestureTimeoutRef.current = setTimeout(() => {
+      setActiveGesture(null);
+    }, 700);
     setTimeout(() => {
       touchStartPosRef.current = null;
     }, 50);
@@ -1287,26 +1473,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      onPointerUp={handleTouchEnd}
       className={
         isMinimized
-          ? 'fixed bottom-16 sm:bottom-4 left-2 right-2 sm:left-auto sm:right-6 sm:w-[420px] h-16 sm:h-[68px] z-50 bg-[#12151B]/95 backdrop-blur-xl border border-[#292E35] rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.85)] flex items-center p-1.5 sm:p-2 select-none overflow-hidden group cursor-pointer animate-fade-in'
-          : `fixed inset-0 z-50 w-screen h-[100dvh] bg-black flex items-center justify-center select-none overflow-hidden touch-none${isFullscreen ? ' player-fullscreen-mode' : ''}`
+          ? 'fixed bottom-16 sm:bottom-4 left-2 right-2 sm:left-auto sm:right-6 sm:w-[420px] h-16 sm:h-[68px] z-50 bg-[#0B1224]/95 backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-[0_12px_40px_rgba(5,10,24,0.85)] flex items-center p-1.5 sm:p-2 select-none overflow-hidden group cursor-pointer animate-fade-in'
+          : `fixed inset-0 z-50 w-full h-full bg-black flex items-center justify-center select-none overflow-hidden touch-none${isFullscreen ? ' player-fullscreen-mode' : ''}`
       }
-      style={
-        // Only apply safe-area padding in portrait (non-fullscreen) — in fullscreen/landscape the CSS class forces 0 padding
-        !isMinimized && !isFullscreen
-          ? {
-              paddingTop: 'env(safe-area-inset-top, 0px)',
-              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-              paddingLeft: 'env(safe-area-inset-left, 0px)',
-              paddingRight: 'env(safe-area-inset-right, 0px)',
-            }
-          : undefined
-      }
+      style={undefined}
     >
       {/* Toast Notification */}
       {!isMinimized && toastMessage && (
-        <div className="absolute top-16 z-50 px-4 py-2 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs sm:text-sm shadow-[0_4px_20px_rgba(240,180,41,0.4)] animate-fade-in pointer-events-none">
+        <div className="absolute top-16 z-50 px-4 py-2 rounded-xl bg-[#176BFF] text-white font-bold text-xs sm:text-sm shadow-[0_4px_20px_rgba(23,107,255,0.45)] animate-fade-in pointer-events-none">
           {toastMessage}
         </div>
       )}
@@ -1316,9 +1493,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         className={
           isMinimized
             ? 'w-24 sm:w-28 h-full rounded-xl overflow-hidden bg-black flex-shrink-0 relative flex items-center justify-center'
-            : isFullscreen
-            ? 'absolute inset-0 w-full h-full overflow-hidden bg-black flex items-center justify-center'
-            : 'relative w-full h-full flex items-center justify-center overflow-hidden'
+            : 'absolute inset-0 w-full h-full overflow-hidden bg-black flex items-center justify-center'
         }
       >
         <video
@@ -1340,12 +1515,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
           onSeeked={handleSeeked}
           onError={handleVideoError}
           poster={movie.backdrop || movie.poster || undefined}
-          className={`w-full h-full transition-[object-fit] duration-200 ${
-            // In portrait mode, ALWAYS use contain to prevent zoomed-in appearance;
-            // cover/fill only make visual sense in landscape/fullscreen
-            !isFullscreen
-              ? 'object-contain'
-              : fitMode === 'cover'
+          data-fit={fitMode}
+          style={{ objectFit: fitMode, transform: 'translateZ(0)', willChange: 'transform' }}
+          className={`w-full h-full transition-[object-fit] duration-150 ${
+            fitMode === 'cover'
               ? 'object-cover'
               : fitMode === 'fill'
               ? 'object-fill'
@@ -1364,58 +1537,58 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
           />
         )}
 
-        {/* Left Edge: Brightness Gesture HUD (Landscape) */}
-        {!isMinimized && activeGesture === 'brightness' && (
-          <div className="absolute left-6 sm:left-10 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center bg-[#15181D]/90 backdrop-blur-xl border border-white/20 px-3 py-4 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.85)] pointer-events-none animate-fade-in min-w-[56px]">
-            <div className="text-[#F0B429] mb-3">
-              {gestureValue > 60 ? (
-                <Sun className="w-6 h-6" />
-              ) : gestureValue > 30 ? (
-                <SunMedium className="w-6 h-6" />
+        {/* Sleek Top Percentage Indicator when scrolling Volume or Brightness */}
+        {!isMinimized && activeGesture && (
+          <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2 rounded-full bg-[#0B1224]/95 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.85)] pointer-events-none animate-fade-in">
+            {activeGesture === 'volume' ? (
+              gestureValue === 0 || isMuted ? (
+                <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 flex-shrink-0" />
+              ) : gestureValue < 50 ? (
+                <Volume1 className="w-4 h-4 sm:w-5 sm:h-5 text-[#35A7FF] flex-shrink-0" />
               ) : (
-                <SunDim className="w-6 h-6" />
-              )}
-            </div>
-            <div className="relative w-2 h-28 sm:h-36 bg-white/20 rounded-full overflow-hidden flex flex-col justify-end">
-              <div
-                className="w-full bg-gradient-to-t from-[#F0B429] to-[#FFF0B3] rounded-full transition-all duration-75"
-                style={{ height: `${gestureValue}%` }}
-              />
-            </div>
-            <span className="mt-3 text-[11px] font-mono font-bold text-white tracking-wider">
-              {gestureValue}%
+                <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-[#35A7FF] flex-shrink-0" />
+              )
+            ) : gestureValue > 60 ? (
+              <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-[#35A7FF] flex-shrink-0" />
+            ) : gestureValue > 30 ? (
+              <SunMedium className="w-4 h-4 sm:w-5 sm:h-5 text-[#35A7FF] flex-shrink-0" />
+            ) : (
+              <SunDim className="w-4 h-4 sm:w-5 sm:h-5 text-[#35A7FF] flex-shrink-0" />
+            )}
+            <span className="text-xs sm:text-sm font-bold font-mono text-white tracking-wider">
+              {activeGesture === 'volume' ? `Volume ${gestureValue}%` : `Brightness ${gestureValue}%`}
             </span>
           </div>
         )}
 
-        {/* Right Edge: Volume Gesture HUD (Landscape) */}
-        {!isMinimized && activeGesture === 'volume' && (
-          <div className="absolute right-6 sm:right-10 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center bg-[#15181D]/90 backdrop-blur-xl border border-white/20 px-3 py-4 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.85)] pointer-events-none animate-fade-in min-w-[56px]">
-            <div className="text-[#F0B429] mb-3">
-              {gestureValue === 0 || isMuted ? (
-                <VolumeX className="w-6 h-6 text-red-400" />
-              ) : gestureValue < 50 ? (
-                <Volume1 className="w-6 h-6" />
-              ) : (
-                <Volume2 className="w-6 h-6" />
-              )}
-            </div>
-            <div className="relative w-2 h-28 sm:h-36 bg-white/20 rounded-full overflow-hidden flex flex-col justify-end">
+        {/* Left Edge: Slim Brightness Scrollbar sticking with video player */}
+        {!isMinimized && activeGesture === 'brightness' && (
+          <div className="absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center pointer-events-none animate-fade-in">
+            <div className="relative w-1.5 sm:w-2 h-36 sm:h-48 bg-black/60 backdrop-blur-md rounded-full overflow-hidden p-0.5 border border-white/20 shadow-[0_0_12px_rgba(0,0,0,0.7)] flex flex-col justify-end">
               <div
-                className="w-full bg-gradient-to-t from-[#F0B429] to-[#FFF0B3] rounded-full transition-all duration-75"
+                className="w-full bg-gradient-to-t from-[#176BFF] to-[#35A7FF] rounded-full transition-all duration-75 shadow-[0_0_8px_rgba(53,167,255,0.7)]"
                 style={{ height: `${gestureValue}%` }}
               />
             </div>
-            <span className="mt-3 text-[11px] font-mono font-bold text-white tracking-wider">
-              {gestureValue}%
-            </span>
+          </div>
+        )}
+
+        {/* Right Edge: Slim Volume Scrollbar sticking with video player */}
+        {!isMinimized && activeGesture === 'volume' && (
+          <div className="absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center pointer-events-none animate-fade-in">
+            <div className="relative w-1.5 sm:w-2 h-36 sm:h-48 bg-black/60 backdrop-blur-md rounded-full overflow-hidden p-0.5 border border-white/20 shadow-[0_0_12px_rgba(0,0,0,0.7)] flex flex-col justify-end">
+              <div
+                className="w-full bg-gradient-to-t from-[#176BFF] to-[#35A7FF] rounded-full transition-all duration-75 shadow-[0_0_8px_rgba(53,167,255,0.7)]"
+                style={{ height: `${gestureValue}%` }}
+              />
+            </div>
           </div>
         )}
 
         {/* Minimized Buffering Spinner */}
         {isMinimized && (isBuffering || loading) && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
-            <Loader2 className="w-5 h-5 text-[#F0B429] animate-spin" />
+            <Loader2 className="w-5 h-5 text-[#35A7FF] animate-spin" />
           </div>
         )}
       </div>
@@ -1427,11 +1600,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
             className="flex-1 min-w-0 px-3 py-1 cursor-pointer flex flex-col justify-center"
             onClick={onRestore}
           >
-            <span className="text-xs sm:text-sm font-semibold text-[#F5F5F2] truncate drop-shadow">
+            <span className="text-xs sm:text-sm font-semibold text-[#F5F7FF] truncate drop-shadow">
               {movie.title}
             </span>
-            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] sm:text-[11px] text-[#9A9FA8]">
-              <span className="text-[#F0B429] font-medium truncate">
+            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] sm:text-[11px] text-[#8D9AB5]">
+              <span className="text-[#35A7FF] font-medium truncate">
                 {isTv ? `S${currentSeason}:E${currentEpisode}` : movie.release_year || 'Movie'}
               </span>
               <span>•</span>
@@ -1448,7 +1621,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 e.stopPropagation();
                 togglePlayPause();
               }}
-              className="w-9 h-9 rounded-full bg-[#1D2127] hover:bg-[#292E35] border border-[#292E35] text-[#F0B429] flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+              className="w-9 h-9 rounded-full bg-[#0E172B] hover:bg-[#16223D] border border-white/[0.08] text-[#35A7FF] flex items-center justify-center cursor-pointer active:scale-95 transition-all"
               title={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
@@ -1460,7 +1633,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 e.stopPropagation();
                 onRestore?.();
               }}
-              className="w-9 h-9 rounded-full bg-[#1D2127] hover:bg-[#292E35] border border-[#292E35] text-[#9A9FA8] hover:text-[#F0B429] flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+              className="w-9 h-9 rounded-full bg-[#0E172B] hover:bg-[#16223D] border border-white/[0.08] text-[#8D9AB5] hover:text-[#35A7FF] flex items-center justify-center cursor-pointer active:scale-95 transition-all"
               title="Expand Player"
             >
               <Maximize2 className="w-3.5 h-3.5" />
@@ -1472,25 +1645,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 e.stopPropagation();
                 onBack();
               }}
-              className="w-9 h-9 rounded-full bg-[#1D2127] hover:bg-red-500/20 hover:text-red-400 border border-[#292E35] text-[#9A9FA8] flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+              className="w-9 h-9 rounded-full bg-[#0E172B] hover:bg-red-500/20 hover:text-red-400 border border-white/[0.08] text-[#8D9AB5] flex items-center justify-center cursor-pointer active:scale-95 transition-all"
               title="Close Video"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#292E35]/60 overflow-hidden">
-            <div className="h-full bg-[#F0B429] transition-all" style={{ width: `${progressPercent}%` }} />
-          </div>
+          <MiniPlaybackProgress videoRef={videoRef} />
         </>
       )}
 
       {/* SINGLE UNIFIED BUFFERING / LOADING SPINNER */}
       {!isMinimized && (isBuffering || loading) && !error && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 pointer-events-none animate-fade-in">
-          <Loader2 className="w-12 h-12 text-[#F0B429] animate-spin" />
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/40 pointer-events-none animate-fade-in">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#0B1224]/85 border border-white/15 backdrop-blur-xl flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.85)]">
+            <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-[#35A7FF] animate-spin" />
+          </div>
           {loading && (
-            <p className="mt-3 text-xs sm:text-sm font-semibold text-gray-200 tracking-wide">
+            <p className="mt-3 text-xs sm:text-sm font-semibold text-[#F5F7FF] tracking-wide drop-shadow">
               Loading stream...
             </p>
           )}
@@ -1500,20 +1673,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       {/* PLAYBACK ERROR CARD */}
       {!isMinimized && !loading && error && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/90 p-4 pointer-events-auto">
-          <div className="flex flex-col items-center gap-4 text-center p-6 max-w-md bg-[#15181D] rounded-2xl border border-[#292E35] shadow-2xl animate-scale-in">
-            <AlertCircle className={`w-12 h-12 ${(currentMovie.is_coming_soon || currentMovie.has_resource === false) ? 'text-[#F0B429]' : 'text-red-400'}`} />
+          <div className="flex flex-col items-center gap-4 text-center p-6 max-w-md bg-[#0B1224] rounded-2xl border border-white/[0.08] shadow-2xl animate-scale-in">
+            <AlertCircle className={`w-12 h-12 ${(currentMovie.is_coming_soon || currentMovie.has_resource === false) ? 'text-[#35A7FF]' : 'text-red-400'}`} />
             <div>
               <h3 className="text-lg font-bold text-white font-headline">
                 {(currentMovie.is_coming_soon || currentMovie.has_resource === false) ? 'Coming Soon' : 'Playback Notice'}
               </h3>
-              <p className="text-xs text-gray-400 mt-1.5 leading-relaxed font-body">{error}</p>
+              <p className="text-xs text-[#8D9AB5] mt-1.5 leading-relaxed font-body">{error}</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
               {!(currentMovie.is_coming_soon || currentMovie.has_resource === false) && (
                 <button
                   type="button"
                   onClick={handleRetry}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs hover:bg-[#F7C948] transition-colors cursor-pointer shadow-[0_4px_16px_rgba(240,180,41,0.35)] min-h-[44px] press-feedback"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold text-xs hover:brightness-110 transition-all cursor-pointer shadow-[0_4px_16px_rgba(23,107,255,0.4)] min-h-[44px] press-feedback"
                 >
                   <RotateCw className="w-4 h-4" />
                   <span>Retry Playback</span>
@@ -1532,7 +1705,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                       isTrailer: true,
                     });
                   }}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-xs hover:bg-[#F7C948] transition-colors cursor-pointer shadow-[0_4px_16px_rgba(240,180,41,0.35)] min-h-[44px] press-feedback"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold text-xs hover:brightness-110 transition-all cursor-pointer shadow-[0_4px_16px_rgba(23,107,255,0.4)] min-h-[44px] press-feedback"
                 >
                   <Play className="w-4 h-4 fill-current" />
                   <span>Watch Trailer</span>
@@ -1541,7 +1714,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
               <button
                 type="button"
                 onClick={onBack}
-                className="px-5 py-2.5 rounded-xl bg-[#1D2127] hover:bg-[#292E35] text-white font-medium text-xs transition-colors cursor-pointer border border-[#292E35] min-h-[44px] press-feedback"
+                className="px-5 py-2.5 rounded-xl bg-[#0E172B] hover:bg-[#16223D] text-white font-medium text-xs transition-colors cursor-pointer border border-white/[0.08] min-h-[44px] press-feedback"
               >
                 Go Back
               </button>
@@ -1550,19 +1723,81 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         </div>
       )}
 
-      {/* FULLSCREEN OVERLAY CONTROLS (Standard, Familiar Streaming UI) */}
-      {!isMinimized && activeStreamUrl && !error && (
+      {/* Floating Screen Lock Button (when controls are visible & unlocked) */}
+      {!isMinimized && activeStreamUrl && !error && !isLocked && (
         <div
-          className={`absolute inset-0 flex flex-col justify-between p-3 sm:p-6 transition-opacity duration-200 pointer-events-none z-30 ${
+          className={`absolute top-1/2 -translate-y-1/2 z-40 transition-opacity duration-200 ${
+            showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+          style={{
+            left: 'max(16px, env(safe-area-inset-left, 16px))',
+          }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(12); });
+              setIsLocked(true);
+              setShowControls(false);
+              setShowUnlockPrompt(true);
+              if (unlockPromptTimerRef.current) clearTimeout(unlockPromptTimerRef.current);
+              unlockPromptTimerRef.current = setTimeout(() => setShowUnlockPrompt(false), 2500);
+              showToast('Screen Locked');
+            }}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#0B1224]/85 hover:bg-[#16223D] active:scale-95 border border-white/20 text-white flex items-center justify-center cursor-pointer shadow-[0_6px_24px_rgba(0,0,0,0.8)] backdrop-blur-xl transition-all press-feedback"
+            title="Lock Screen"
+            aria-label="Lock Screen"
+          >
+            <Lock className="w-5 h-5 text-white/90" />
+          </button>
+        </div>
+      )}
+
+      {/* Floating Unlock Button (when screen is locked) */}
+      {!isMinimized && activeStreamUrl && !error && isLocked && (
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 z-50 transition-all duration-300 pointer-events-auto ${
+            showUnlockPrompt ? 'opacity-100 scale-100' : 'opacity-40 hover:opacity-100 scale-95 hover:scale-100'
+          }`}
+          style={{
+            left: 'max(16px, env(safe-area-inset-left, 16px))',
+          }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(12); });
+              setIsLocked(false);
+              setShowControls(true);
+              setShowUnlockPrompt(false);
+              showToast('Screen Unlocked');
+            }}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-[#0B1224]/95 hover:bg-[#16223D] active:scale-95 border border-[#35A7FF]/50 text-[#35A7FF] shadow-[0_8px_32px_rgba(0,0,0,0.9)] backdrop-blur-xl transition-all cursor-pointer press-feedback"
+            title="Unlock Screen"
+            aria-label="Unlock Screen"
+          >
+            <Unlock className="w-5 h-5 text-[#35A7FF]" />
+            <span className="text-xs font-bold font-mono text-white tracking-wider pr-1">Unlock</span>
+          </button>
+        </div>
+      )}
+
+      {/* FULLSCREEN OVERLAY CONTROLS (Standard, Familiar Streaming UI) */}
+      {!isMinimized && activeStreamUrl && !error && !isLocked && (
+        <div
+          className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-200 pointer-events-none z-30 ${
             showControls ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          {/* Top Bar */}
+          {/* Top Bar: Spans 100% full width with device safe-area insets */}
           <div
-            className="flex items-center justify-between pointer-events-auto bg-gradient-to-b from-black/95 via-black/50 to-transparent p-2.5 sm:p-4 rounded-t-xl gap-3"
+            className="w-full flex items-center justify-between pointer-events-auto bg-gradient-to-b from-black/95 via-black/60 to-transparent pt-3 pb-6 px-4 sm:px-8 gap-3"
             style={{
-              paddingLeft: 'max(14px, env(safe-area-inset-left, 14px))',
-              paddingRight: 'max(14px, env(safe-area-inset-right, 14px))',
+              paddingTop: 'max(12px, env(safe-area-inset-top, 12px))',
+              paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
+              paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
             }}
           >
             {/* Left: Back / Minimize & Title */}
@@ -1574,16 +1809,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                   if (onMinimize) onMinimize();
                   else onBack();
                 }}
-                className="w-10 h-10 rounded-full bg-[#15181D]/80 hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] text-white flex items-center justify-center cursor-pointer transition-colors press-feedback flex-shrink-0"
+                className="w-10 h-10 rounded-full bg-[#0B1224]/80 hover:bg-[#16223D] active:bg-[#050A18] border border-white/[0.08] text-white flex items-center justify-center cursor-pointer transition-colors press-feedback flex-shrink-0"
                 title="Minimize player"
                 aria-label="Minimize"
               >
-                <ChevronDown className="w-5 h-5 text-[#F0B429]" />
+                <ChevronDown className="w-5 h-5 text-[#35A7FF]" />
               </button>
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-xs sm:text-sm md:text-base font-bold text-[#F5F5F2] truncate font-headline">
+                  <h2 className="text-xs sm:text-sm md:text-base font-bold text-[#F5F7FF] truncate font-headline">
                     {currentMovie.title}
                   </h2>
                   {selectedQuality === 'Offline HD' && (
@@ -1592,18 +1827,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                     </span>
                   )}
                   {streamInfo?.isTrailer && (
-                    <span className="text-[9px] font-mono font-bold bg-[#F0B429]/20 text-[#F0B429] border border-[#F0B429]/40 px-1.5 py-0.5 rounded shrink-0 uppercase">
+                    <span className="text-[9px] font-mono font-bold bg-[#176BFF]/15 text-[#35A7FF] border border-[#35A7FF]/30 px-1.5 py-0.5 rounded shrink-0 uppercase">
                       Trailer
                     </span>
                   )}
                 </div>
                 {isTv ? (
-                  <p className="text-[10px] sm:text-xs text-[#F0B429] font-semibold font-mono truncate">
+                  <p className="text-[10px] sm:text-xs text-[#35A7FF] font-semibold font-mono truncate">
                     Season {currentSeason} • Episode {currentEpisode}
                   </p>
                 ) : (
                   currentMovie.release_year ? (
-                    <p className="text-[10px] sm:text-xs text-[#9A9FA8] font-mono truncate">
+                    <p className="text-[10px] sm:text-xs text-[#8D9AB5] font-mono truncate">
                       {currentMovie.release_year} {currentMovie.duration ? `• ${currentMovie.duration}` : ''}
                     </p>
                   ) : null
@@ -1625,19 +1860,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                       setIsLanguageMenuOpen(false);
                       setIsEpisodesMenuOpen(false);
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors min-h-[36px]"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
                     title="Playback Speed"
                   >
-                    <Gauge className="w-3.5 h-3.5 text-[#F0B429]" />
+                    <Gauge className="w-3.5 h-3.5 text-[#35A7FF]" />
                     <span className="font-mono text-[11px]">{playbackSpeed}x</span>
                   </button>
 
                   {isSpeedMenuOpen && (
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-full mt-2 w-32 bg-[#15181D] border border-[#292E35] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in"
+                      className="absolute right-0 top-full mt-2 w-32 bg-[#0B1224] border border-white/[0.08] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in"
                     >
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-2 py-1 font-mono">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono">
                         Speed
                       </div>
                       {[0.75, 1.0, 1.25, 1.5, 2.0].map((s) => (
@@ -1647,12 +1882,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                           onClick={() => handleSelectSpeed(s)}
                           className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                             playbackSpeed === s
-                              ? 'bg-[#F0B429] text-[#0B0D10] font-bold'
-                              : 'text-gray-300 hover:bg-[#1D2127]'
+                              ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                              : 'text-gray-300 hover:bg-[#16223D]'
                           }`}
                         >
                           <span>{s === 1 ? 'Normal' : `${s}x`}</span>
-                          {playbackSpeed === s && <Check className="w-3.5 h-3.5 text-[#0B0D10] stroke-[2.5]" />}
+                          {playbackSpeed === s && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
                         </button>
                       ))}
                     </div>
@@ -1671,10 +1906,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                     setIsSpeedMenuOpen(false);
                     setIsEpisodesMenuOpen(false);
                   }}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors min-h-[36px]"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
                   title="Audio Language"
                 >
-                  <Languages className="w-3.5 h-3.5 text-[#F0B429]" />
+                  <Languages className="w-3.5 h-3.5 text-[#35A7FF]" />
                   <span className="font-mono text-[11px] truncate max-w-[70px] sm:max-w-[90px]">
                     {selectedLanguage || 'Audio'}
                   </span>
@@ -1683,11 +1918,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 {isLanguageMenuOpen && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 top-full mt-2 w-48 bg-[#15181D] border border-[#292E35] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in"
+                    className="absolute right-0 top-full mt-2 w-48 bg-[#0B1224] border border-white/[0.08] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in"
                   >
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-2 py-1 font-mono flex items-center justify-between">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono flex items-center justify-between">
                       <span>Audio / Language</span>
-                      {isSwitchingLanguage && <Loader2 className="w-3 h-3 text-[#F0B429] animate-spin" />}
+                      {isSwitchingLanguage && <Loader2 className="w-3 h-3 text-[#35A7FF] animate-spin" />}
                     </div>
                     {availableLanguageOptions.map((lang, idx) => {
                       const isSelected =
@@ -1705,19 +1940,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                           onClick={() => handleSelectLanguage(lang)}
                           className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                             isSelected
-                              ? 'bg-[#F0B429] text-[#0B0D10] font-bold'
-                              : 'text-gray-300 hover:bg-[#1D2127] disabled:opacity-50'
+                              ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                              : 'text-gray-300 hover:bg-[#16223D] disabled:opacity-50'
                           }`}
                         >
                           <div className="flex items-center gap-1.5 truncate">
                             <span className="truncate">{lang}</span>
                             {!isSelected && isLoadedVariant && (
-                              <span className="text-[9px] px-1 py-0.5 rounded bg-[#F0B429]/10 text-[#F0B429] font-mono">
+                              <span className="text-[9px] px-1 py-0.5 rounded bg-[#176BFF]/15 text-[#35A7FF] font-mono border border-[#35A7FF]/30">
                                 Ready
                               </span>
                             )}
                           </div>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-[#0B0D10] stroke-[2.5]" />}
+                          {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
                         </button>
                       );
                     })}
@@ -1737,19 +1972,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                       setIsLanguageMenuOpen(false);
                       setIsEpisodesMenuOpen(false);
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors min-h-[36px]"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
                     title="Video Quality"
                   >
-                    <Sliders className="w-3.5 h-3.5 text-[#F0B429]" />
+                    <Sliders className="w-3.5 h-3.5 text-[#35A7FF]" />
                     <span className="font-mono text-[11px]">{selectedQuality.replace(/ Direct.*/i, '')}</span>
                   </button>
 
                   {isQualityMenuOpen && (
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-full mt-2 w-40 bg-[#15181D] border border-[#292E35] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in"
+                      className="absolute right-0 top-full mt-2 w-40 bg-[#0B1224] border border-white/[0.08] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in"
                     >
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-2 py-1 font-mono">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono">
                         Quality
                       </div>
                       <button
@@ -1757,12 +1992,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                         onClick={() => handleSelectQuality('Auto')}
                         className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                           selectedQuality === 'Auto'
-                            ? 'bg-[#F0B429] text-[#0B0D10] font-bold'
-                            : 'text-gray-300 hover:bg-[#1D2127]'
+                            ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                            : 'text-gray-300 hover:bg-[#16223D]'
                         }`}
                       >
                         <span>Auto (Adaptive)</span>
-                        {selectedQuality === 'Auto' && <Check className="w-3.5 h-3.5 text-[#0B0D10] stroke-[2.5]" />}
+                        {selectedQuality === 'Auto' && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
                       </button>
 
                       {streamInfo.qualities.map((q, idx) => (
@@ -1772,12 +2007,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                           onClick={() => handleSelectQuality(q.quality)}
                           className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                             selectedQuality === q.quality
-                              ? 'bg-[#F0B429] text-[#0B0D10] font-bold'
-                              : 'text-gray-300 hover:bg-[#1D2127]'
+                              ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                              : 'text-gray-300 hover:bg-[#16223D]'
                           }`}
                         >
                           <span>{q.quality.replace(/ Direct.*/i, '')}</span>
-                          {selectedQuality === q.quality && <Check className="w-3.5 h-3.5 text-[#0B0D10] stroke-[2.5]" />}
+                          {selectedQuality === q.quality && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
                         </button>
                       ))}
                     </div>
@@ -1790,7 +2025,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
           {/* Center Play/Pause & Quick Skip Controls */}
           <div
             className={`my-auto pointer-events-auto flex items-center justify-center gap-8 sm:gap-14 transition-opacity duration-200 ${
-              loading ? 'opacity-0 pointer-events-none' : 'opacity-100'
+              (loading || isBuffering) ? 'opacity-0 pointer-events-none' : 'opacity-100'
             }`}
           >
             <button
@@ -1799,11 +2034,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 e.stopPropagation();
                 handleSkip(-10);
               }}
-              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/40 hover:bg-black/60 active:scale-95 border border-white/15 text-white/90 hover:text-[#F0B429] flex items-center justify-center cursor-pointer transition-all backdrop-blur-md press-feedback"
+              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/40 hover:bg-black/60 active:scale-95 border border-white/15 text-white/90 hover:text-[#35A7FF] flex items-center justify-center cursor-pointer transition-all backdrop-blur-md press-feedback"
               title="Rewind 10 seconds"
               aria-label="Rewind 10 seconds"
             >
-              <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-[#F0B429]" />
+              <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-[#35A7FF]" />
             </button>
 
             <button
@@ -1812,7 +2047,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 e.stopPropagation();
                 togglePlayPause();
               }}
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#F0B429] hover:bg-[#F7C948] active:scale-95 text-[#0B0D10] flex items-center justify-center cursor-pointer transition-all shadow-[0_8px_30px_rgba(240,180,41,0.45)] press-feedback"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-r from-[#176BFF] to-[#35A7FF] hover:brightness-110 active:scale-95 text-white flex items-center justify-center cursor-pointer transition-all shadow-[0_8px_30px_rgba(23,107,255,0.45)] press-feedback"
               title={isPlaying ? 'Pause' : 'Play'}
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
@@ -1829,51 +2064,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 e.stopPropagation();
                 handleSkip(10);
               }}
-              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/40 hover:bg-black/60 active:scale-95 border border-white/15 text-white/90 hover:text-[#F0B429] flex items-center justify-center cursor-pointer transition-all backdrop-blur-md press-feedback"
+              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/40 hover:bg-black/60 active:scale-95 border border-white/15 text-white/90 hover:text-[#35A7FF] flex items-center justify-center cursor-pointer transition-all backdrop-blur-md press-feedback"
               title="Forward 10 seconds"
               aria-label="Forward 10 seconds"
             >
-              <RotateCw className="w-5 h-5 sm:w-6 sm:h-6 text-[#F0B429]" />
+              <RotateCw className="w-5 h-5 sm:w-6 sm:h-6 text-[#35A7FF]" />
             </button>
           </div>
 
-          {/* Bottom Bar: Timeline Scrubber + Controls Row */}
+          {/* Bottom Bar: Full edge-to-edge width with device safe-area insets */}
           <div
-            className="flex flex-col gap-2.5 pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent p-3 sm:p-5 rounded-b-xl"
+            className="w-full flex flex-col gap-2.5 pointer-events-auto bg-gradient-to-t from-black/95 via-black/70 to-transparent pt-6 pb-3 px-4 sm:px-8"
             style={{
-              paddingLeft: 'max(14px, env(safe-area-inset-left, 14px))',
-              paddingRight: 'max(14px, env(safe-area-inset-right, 14px))',
+              paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+              paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
+              paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
             }}
           >
-            {/* Timeline Scrub Bar */}
-            <div className="relative w-full h-8 flex items-center select-none cursor-pointer">
-              <div className="relative w-full h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden pointer-events-none">
-                {/* Buffered Lookahead Bar */}
-                <div
-                  className="absolute h-full bg-white/35 rounded-full"
-                  style={{ width: `${bufferedPercent}%` }}
-                />
-                {/* Active Progress Bar */}
-                <div
-                  className="absolute h-full bg-[#F0B429] rounded-full"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-
-              {/* Native Scrub Range Input */}
-              <input
-                type="range"
-                min={0}
-                max={duration || 100}
-                step={0.1}
-                value={scrubTime !== null ? scrubTime : currentTime}
-                onPointerDown={handleSeekStart}
-                onChange={(e) => handleSeekChange(parseFloat(e.target.value))}
-                onPointerUp={(e) => commitSeek(parseFloat(e.currentTarget.value))}
-                onPointerCancel={() => commitSeek(currentTime)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 touch-none"
-              />
-            </div>
+            {/* Timeline Scrub Bar (Atomic isolated sub-component: 0Hz parent re-renders) */}
+            <PlaybackProgress
+              videoRef={videoRef}
+              triggerShowControls={triggerShowControls}
+              commitSeek={commitSeek}
+            />
 
             {/* Bottom Controls Row */}
             <div className="flex items-center justify-between text-white text-xs sm:text-sm">
@@ -1888,7 +2101,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                         e.stopPropagation();
                         togglePlayPause();
                       }}
-                      className="w-10 h-10 rounded-xl text-white hover:text-[#F0B429] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors press-feedback"
+                      className="w-10 h-10 rounded-xl text-white hover:text-[#35A7FF] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors press-feedback"
                       aria-label={isPlaying ? 'Pause' : 'Play'}
                     >
                       {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
@@ -1904,7 +2117,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                       title="Rewind 10 seconds"
                       aria-label="Rewind 10 seconds"
                     >
-                      <RotateCcw className="w-4 h-4 text-[#F0B429]" />
+                      <RotateCcw className="w-4 h-4 text-[#35A7FF]" />
                     </button>
 
                     <button
@@ -1917,15 +2130,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                       title="Forward 10 seconds"
                       aria-label="Forward 10 seconds"
                     >
-                      <RotateCw className="w-4 h-4 text-[#F0B429]" />
+                      <RotateCw className="w-4 h-4 text-[#35A7FF]" />
                     </button>
                   </>
                 )}
 
-                {/* Time Display (Always visible) */}
-                <span className="font-mono text-[11px] sm:text-xs text-gray-300 select-none">
-                  {formatTime(scrubTime !== null ? scrubTime : currentTime)} / {formatTime(duration)}
-                </span>
+                {/* Time Display (Atomic isolated sub-component) */}
+                <PlaybackTime videoRef={videoRef} />
 
                 {/* Volume & Mute - Landscape Only */}
                 {isFullscreen && (
@@ -1946,7 +2157,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 {/* Landscape On-Screen Brightness Slider */}
                 {isFullscreen && (
                   <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/40 border border-white/10 backdrop-blur-md ml-2">
-                    <Sun className="w-3.5 h-3.5 text-[#F0B429]" />
+                    <Sun className="w-3.5 h-3.5 text-[#35A7FF]" />
                     <input
                       type="range"
                       min={0.1}
@@ -1964,7 +2175,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                         if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
                         gestureTimeoutRef.current = setTimeout(() => setActiveGesture(null), 1000);
                       }}
-                      className="w-16 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#F0B429]"
+                      className="w-16 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#176BFF]"
                       title="Screen Brightness"
                     />
                     <span className="font-mono text-[10px] text-gray-300 w-7 text-right">{Math.round(brightness * 100)}%</span>
@@ -1974,7 +2185,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 {/* Landscape On-Screen Volume Slider */}
                 {isFullscreen && (
                   <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/40 border border-white/10 backdrop-blur-md">
-                    <Volume2 className="w-3.5 h-3.5 text-[#F0B429]" />
+                    <Volume2 className="w-3.5 h-3.5 text-[#35A7FF]" />
                     <input
                       type="range"
                       min={0}
@@ -1998,7 +2209,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                         if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
                         gestureTimeoutRef.current = setTimeout(() => setActiveGesture(null), 1000);
                       }}
-                      className="w-16 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#F0B429]"
+                      className="w-16 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#176BFF]"
                       title="Audio Volume"
                     />
                     <span className="font-mono text-[10px] text-gray-300 w-7 text-right">{isMuted ? '0%' : `${Math.round(volume * 100)}%`}</span>
@@ -2008,24 +2219,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
               {/* Right Controls: Screen Fit (Landscape only), TV Episodes Switcher & Fullscreen */}
               <div className="flex items-center gap-2">
-                {/* Screen Aspect Ratio Fit Toggle - STRICTLY LANDSCAPE/FULLSCREEN ONLY */}
-                {isFullscreen && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cycleFitMode();
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors min-h-[36px]"
-                    title={`Screen Fit: ${fitMode === 'contain' ? 'Fit (Original)' : fitMode === 'cover' ? 'Zoom (Fill Screen)' : 'Stretch'}`}
-                    aria-label="Toggle Screen Fit"
-                  >
-                    <Scan className="w-3.5 h-3.5 text-[#F0B429]" />
-                    <span className="font-mono text-[11px] uppercase hidden sm:inline">
-                      {fitMode === 'contain' ? 'Fit' : fitMode === 'cover' ? 'Zoom' : 'Stretch'}
-                    </span>
-                  </button>
-                )}
+                {/* Screen Aspect Ratio Fit Toggle - Available in ALL orientations */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cycleFitMode();
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0E1726]/90 hover:bg-[#16223D] active:bg-[#060911] border border-white/10 text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
+                  title={`Screen Fit: ${fitMode === 'contain' ? 'Fit Screen' : fitMode === 'cover' ? 'Full Screen' : 'Fill Screen'}`}
+                  aria-label="Toggle Screen Fit"
+                >
+                  <Scan className="w-3.5 h-3.5 text-[#35A7FF]" />
+                  <span className="font-mono text-[11px] font-semibold whitespace-nowrap">
+                    {fitMode === 'contain' ? 'Fit Screen' : fitMode === 'cover' ? 'Full Screen' : 'Fill Screen'}
+                  </span>
+                </button>
 
                 {/* TV Series Episode & Season Drawer Trigger */}
                 {isTv && (
@@ -2037,10 +2246,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                         e.stopPropagation();
                         handleNextEpisode();
                       }}
-                      className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors min-h-[36px]"
+                      className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] active:bg-[#050A18] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
                       title="Next Episode"
                     >
-                      <SkipForward className="w-3.5 h-3.5 text-[#F0B429]" />
+                      <SkipForward className="w-3.5 h-3.5 text-[#35A7FF]" />
                       <span className="hidden sm:inline">Next Ep</span>
                     </button>
 
@@ -2054,11 +2263,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                         setIsQualityMenuOpen(false);
                         setIsSpeedMenuOpen(false);
                       }}
-                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#15181D]/90 hover:bg-[#1D2127] active:bg-[#0B0D10] border border-[#292E35] text-xs font-semibold text-gray-200 cursor-pointer transition-colors min-h-[36px]"
+                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] active:bg-[#050A18] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
                       title="Seasons & Episodes"
                     >
-                      <ListOrdered className="w-4 h-4 text-[#F0B429]" />
-                      <span className="font-mono text-xs text-[#F0B429]">S{currentSeason}:E{currentEpisode}</span>
+                      <ListOrdered className="w-4 h-4 text-[#35A7FF]" />
+                      <span className="font-mono text-xs text-[#35A7FF]">S{currentSeason}:E{currentEpisode}</span>
                     </button>
                   </div>
                 )}
@@ -2093,22 +2302,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full sm:w-[480px] max-h-[85vh] sm:max-h-[90vh] bg-[#0E1116] border-t sm:border border-[#292E35] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up sm:animate-fade-in"
+            className="w-full sm:w-[480px] max-h-[85vh] sm:max-h-[90vh] bg-[#0B1224] border-t sm:border border-white/[0.08] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up sm:animate-fade-in"
           >
             {/* Header */}
-            <div className="p-4 border-b border-[#292E35] flex items-center justify-between bg-[#14181F]">
+            <div className="p-4 border-b border-white/[0.08] flex items-center justify-between bg-[#050A18]">
               <div className="min-w-0 pr-2">
-                <h3 className="text-base font-bold text-[#F5F5F2] font-headline truncate">
+                <h3 className="text-base font-bold text-[#F5F7FF] font-headline truncate">
                   {currentMovie.title}
                 </h3>
-                <p className="text-xs text-[#9A9FA8] mt-0.5 font-medium">
-                  Now Playing: <span className="text-[#F0B429] font-bold font-mono">Season {currentSeason} • Episode {currentEpisode}</span>
+                <p className="text-xs text-[#8D9AB5] mt-0.5 font-medium">
+                  Now Playing: <span className="text-[#35A7FF] font-bold font-mono">Season {currentSeason} • Episode {currentEpisode}</span>
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEpisodesMenuOpen(false)}
-                className="w-8 h-8 rounded-full bg-[#1F242D] hover:bg-[#2A313D] text-gray-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
+                className="w-8 h-8 rounded-full bg-[#16223D] hover:bg-[#111B33] text-gray-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
@@ -2117,10 +2326,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
             {/* Season Selector Tabs */}
             {allSeasons.length > 1 && (
-              <div className="px-4 py-3 border-b border-[#292E35] bg-[#11141B]">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2 font-mono flex items-center justify-between">
+              <div className="px-4 py-3 border-b border-white/[0.08] bg-[#050A18]/60">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#8D9AB5] mb-2 font-mono flex items-center justify-between">
                   <span>Select Season</span>
-                  <span className="text-[#F0B429] text-[10px]">Browsing Season {browsingSeason}</span>
+                  <span className="text-[#35A7FF] text-[10px]">Browsing Season {browsingSeason}</span>
                 </div>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                   {allSeasons.map((s) => {
@@ -2137,13 +2346,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                         }}
                         className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer press-feedback flex items-center gap-1.5 ${
                           isBrowsing
-                            ? 'bg-[#F0B429] text-[#0B0D10] shadow-[0_2px_8px_rgba(240,180,41,0.35)] font-extrabold'
-                            : 'bg-[#1C212A] text-gray-300 hover:bg-[#252B35] hover:text-white border border-[#292E35]'
+                            ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white shadow-[0_2px_8px_rgba(23,107,255,0.35)] font-extrabold'
+                            : 'bg-[#0E172B] text-gray-300 hover:bg-[#16223D] hover:text-white border border-white/[0.08]'
                         }`}
                       >
                         <span>Season {sNum}</span>
                         {isCurrent && (
-                          <span className={`w-1.5 h-1.5 rounded-full ${isBrowsing ? 'bg-[#0B0D10]' : 'bg-[#F0B429]'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${isBrowsing ? 'bg-white' : 'bg-[#35A7FF]'}`} />
                         )}
                       </button>
                     );
@@ -2155,11 +2364,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
             {/* Episodes List / Grid */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[50vh] sm:max-h-[55vh]">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-gray-300 uppercase tracking-wider font-mono">
+                <span className="text-xs font-bold text-[#F5F7FF] uppercase tracking-wider font-mono">
                   Season {browsingSeason} Episodes ({activeEpisodesList.length})
                 </span>
                 {browsingSeason !== currentSeason && (
-                  <span className="text-[11px] text-[#F0B429] font-medium">
+                  <span className="text-[11px] text-[#35A7FF] font-medium">
                     Tap episode to switch season
                   </span>
                 )}
@@ -2176,22 +2385,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                       onClick={() => handleSelectSeasonAndEpisode(browsingSeason, epNum)}
                       className={`p-3 rounded-xl border text-left transition-all cursor-pointer press-feedback flex flex-col justify-between ${
                         isSelected
-                          ? 'bg-[#F0B429]/15 border-[#F0B429] shadow-[0_0_15px_rgba(240,180,41,0.2)]'
-                          : 'bg-[#161A22] border-[#292E35] hover:bg-[#1E232E] hover:border-gray-600'
+                          ? 'bg-[#176BFF]/15 border-[#35A7FF] shadow-[0_0_15px_rgba(23,107,255,0.25)]'
+                          : 'bg-[#0E172B] border-white/[0.08] hover:bg-[#16223D] hover:border-[#35A7FF]/40'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`text-xs font-bold font-mono ${isSelected ? 'text-[#F0B429]' : 'text-gray-200'}`}>
+                        <span className={`text-xs font-bold font-mono ${isSelected ? 'text-[#35A7FF]' : 'text-[#F5F7FF]'}`}>
                           Episode {epNum}
                         </span>
                         {isSelected && (
-                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-[#F0B429] text-[#0B0D10]">
+                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-[#176BFF] text-white">
                             Playing
                           </span>
                         )}
                       </div>
                       {ep.title && ep.title !== `Episode ${epNum}` && (
-                        <span className="text-[11px] text-gray-400 line-clamp-1 mt-1 font-normal">
+                        <span className="text-[11px] text-[#8D9AB5] line-clamp-1 mt-1 font-normal">
                           {ep.title}
                         </span>
                       )}
@@ -2202,19 +2411,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
             </div>
 
             {/* Quick Actions Footer */}
-            <div className="p-3 border-t border-[#292E35] bg-[#14181F] flex items-center justify-between">
+            <div className="p-3 border-t border-white/[0.08] bg-[#050A18] flex items-center justify-between">
               <button
                 type="button"
                 onClick={handleNextEpisode}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1F242D] hover:bg-[#2A313D] text-xs font-bold text-[#F5F5F2] transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0E172B] hover:bg-[#16223D] text-xs font-bold text-[#F5F7FF] transition-colors cursor-pointer border border-white/[0.08]"
               >
-                <SkipForward className="w-3.5 h-3.5 text-[#F0B429]" />
+                <SkipForward className="w-3.5 h-3.5 text-[#35A7FF]" />
                 <span>Next Episode</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsEpisodesMenuOpen(false)}
-                className="px-4 py-2 rounded-xl bg-[#F0B429] text-[#0B0D10] text-xs font-bold hover:bg-[#F7C948] transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white text-xs font-bold hover:brightness-110 shadow-[0_2px_10px_rgba(23,107,255,0.35)] transition-all cursor-pointer"
               >
                 Back to Player
               </button>

@@ -288,6 +288,25 @@ export const App: React.FC = () => {
     return { ...catalog, featured: safeFeatured, rows: safeRows };
   }, [catalog]);
 
+  // Curate trending hero movies & series for the interactive swipeable top carousel
+  const trendingHeroMovies = useMemo(() => {
+    if (!safeCatalog) return [];
+    const list: Movie[] = [];
+    if (safeCatalog.featured) {
+      list.push(safeCatalog.featured);
+    }
+    if (safeCatalog.rows && safeCatalog.rows.length > 0) {
+      for (const shelf of safeCatalog.rows.slice(0, 3)) {
+        for (const item of shelf.items.slice(0, 4)) {
+          if (!list.some((m) => m.id === item.id) && (item.backdrop || item.poster)) {
+            list.push(item);
+          }
+        }
+      }
+    }
+    return list.slice(0, 8);
+  }, [safeCatalog]);
+
   // Progressive Shelf Rendering for Low-End Devices:
   // Render top 6 shelves immediately (0ms first paint), then progressively reveal the rest in batches of 4
   const [renderedShelfCount, setRenderedShelfCount] = useState<number>(6);
@@ -479,7 +498,7 @@ export const App: React.FC = () => {
         />
       )}
 
-      <div className="min-h-screen bg-[#0B0D10] text-[#F5F5F2] flex flex-col">
+      <div className="min-h-screen bg-[#050A18] text-[#F5F7FF] flex flex-col">
         {/* Navigation Bar */}
         {!playingMovie || isPlayerMinimized ? (
           <Navbar
@@ -518,6 +537,7 @@ export const App: React.FC = () => {
                   <HeroBillboardSkeleton />
                 ) : (
                   <HeroBanner
+                    movies={trendingHeroMovies}
                     movie={safeCatalog?.featured || null}
                     onPlayMovie={(m) => handlePlayMovie(m)}
                     onSelectMovie={(m) => handleSelectMovie(m)}
@@ -543,17 +563,17 @@ export const App: React.FC = () => {
                     ))
                   ) : (
                     <div className="flex flex-col items-center justify-center py-24 text-center px-6">
-                      <div className="w-16 h-16 rounded-2xl bg-[#15181D] border border-[#292E35] flex items-center justify-center mb-4">
-                        <Film className="w-8 h-8 text-[#292E35]" />
+                      <div className="w-16 h-16 rounded-2xl bg-[#0E172B] border border-white/[0.08] flex items-center justify-center mb-4 shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+                        <Film className="w-8 h-8 text-[#8D9AB5]" />
                       </div>
-                      <h3 className="text-lg font-bold text-[#F5F5F2] font-headline">No Content Available</h3>
-                      <p className="text-sm text-[#9A9FA8] mt-2 max-w-xs leading-relaxed">
+                      <h3 className="text-lg font-bold text-[#F5F7FF] font-headline tracking-wide">No Content Available</h3>
+                      <p className="text-sm text-[#8D9AB5] mt-2 max-w-xs leading-relaxed">
                         Unable to reach stream catalog. Check your connection and try again.
                       </p>
                       <button
                         type="button"
                         onClick={() => window.location.reload()}
-                        className="mt-6 px-6 py-3 rounded-xl bg-[#F0B429] text-[#0B0D10] font-bold text-sm cursor-pointer press-feedback shadow-[var(--shadow-button)] min-h-[48px]"
+                        className="mt-6 px-6 py-3 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold text-sm cursor-pointer press-feedback shadow-[0_4px_20px_rgba(23,107,255,0.45)] hover:shadow-[0_4px_28px_rgba(23,107,255,0.65)] transition-all min-h-[48px]"
                       >
                         Reload App
                       </button>
@@ -570,8 +590,8 @@ export const App: React.FC = () => {
               <Suspense
                 fallback={
                   <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 text-center">
-                    <div className="w-10 h-10 rounded-full border-2 border-[#F0B429] border-t-transparent animate-spin mb-3" />
-                    <p className="text-sm font-semibold text-[#F0B429]">Connecting to Live TV Network...</p>
+                    <div className="w-10 h-10 rounded-full border-2 border-[#176BFF] border-t-transparent animate-spin mb-3" />
+                    <p className="text-sm font-semibold text-[#35A7FF]">Connecting to Live TV Network...</p>
                   </div>
                 }
               >

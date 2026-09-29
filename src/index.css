@@ -2,34 +2,35 @@
 
 @layer base {
   :root {
-    /* CineVault Premium Cinematic Dark Color System */
-    --bg-base: #0B0D10;
-    --bg-surface: #15181D;
-    --bg-surface-elevated: #1D2127;
-    --bg-card: #15181D;
-    --bg-card-hover: #1D2127;
+    /* CineVault Electric Midnight Color System */
+    --bg-base: #060911;
+    --bg-surface: #0E1726;
+    --bg-surface-elevated: #162033;
+    --bg-card: #0E1726;
+    --bg-card-hover: #14223A;
     
     /* Text Hierarchy */
-    --text-primary: #F5F5F2;
-    --text-secondary: #9A9FA8;
-    --text-muted: #6B7280;
+    --text-primary: #FFFFFF;
+    --text-secondary: #94A3B8;
+    --text-muted: #475569;
     
-    /* Primary Accent: Vibrant Electric Gold */
-    --accent: #F0B429;
-    --accent-hover: #F7C948;
-    --accent-active: #D99E0B;
-    --accent-muted: rgba(240, 180, 41, 0.12);
-    --accent-glow: rgba(240, 180, 41, 0.35);
+    /* Primary Accent: Electric Cobalt & Cyan Glow */
+    --accent: #176BFF;
+    --accent-hover: #35A7FF;
+    --accent-cyan: #00D2FF;
+    --accent-active: #0D47A1;
+    --accent-muted: rgba(23, 107, 255, 0.12);
+    --accent-glow: rgba(23, 107, 255, 0.45);
     
     /* Borders & Dividers */
-    --border: #292E35;
-    --border-hover: rgba(240, 180, 41, 0.4);
-    --overlay: rgba(11, 13, 16, 0.9);
+    --border: rgba(53, 167, 255, 0.15);
+    --border-hover: rgba(53, 167, 255, 0.45);
+    --overlay: rgba(6, 9, 17, 0.94);
 
     /* Semantic Status */
     --status-success: #5FAF7B;
-    --status-error: #D66A6A;
-    --gold-star: #F0B429;
+    --status-error: #EF4444;
+    --gold-star: #FBBF24;
 
     /* === Design Tokens: Spacing Scale === */
     --space-xs: 4px;
@@ -48,11 +49,11 @@
     --radius-full: 9999px;
 
     /* === Design Tokens: Shadows === */
-    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(41, 46, 53, 0.5);
-    --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(240, 180, 41, 0.3);
-    --shadow-elevated: 0 16px 48px rgba(0, 0, 0, 0.6);
-    --shadow-button: 0 2px 8px rgba(240, 180, 41, 0.25);
-    --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
+    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(53, 167, 255, 0.12);
+    --shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(53, 167, 255, 0.5), 0 0 24px rgba(23, 107, 255, 0.35);
+    --shadow-elevated: 0 16px 48px rgba(0, 0, 0, 0.85);
+    --shadow-button: 0 4px 20px rgba(23, 107, 255, 0.5), 0 0 12px rgba(0, 210, 255, 0.3);
+    --shadow-modal: 0 24px 64px rgba(6, 9, 17, 0.95);
 
     /* === Design Tokens: Transitions === */
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -68,7 +69,7 @@
 
   html, body, #root {
     scroll-behavior: smooth;
-    background-color: #0B0D10;
+    background-color: #060911;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     -khtml-user-select: none;
@@ -78,8 +79,8 @@
   }
 
   body {
-    background-color: #0B0D10;
-    color: #F5F5F2;
+    background-color: #060911;
+    color: #FFFFFF;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
@@ -107,7 +108,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid #F0B429;
+    outline: 2px solid #176BFF;
     outline-offset: 2px;
   }
 }
@@ -130,34 +131,44 @@
   }
 }
 
-
 /* ============================================================
-   Custom Minimal CineVault Gold Scrollbar
+   100% Invisible Scrollbars (Mobile & Desktop App-Feel)
+   Completely removes all visible scrollbars across every element
+   while keeping smooth touch and trackpad scrolling intact.
    ============================================================ */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
-::-webkit-scrollbar-track {
-  background: #0B0D10;
+*::-webkit-scrollbar,
+::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner,
+::-webkit-scrollbar-corner {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #1D2127;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #F0B429;
-}
-
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar-thumb,
+.scrollbar-none::-webkit-scrollbar-track {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 .scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
 
@@ -320,7 +331,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), rgba(240, 180, 41, 0.15) 0%, transparent 60%);
+  background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), rgba(23, 107, 255, 0.25) 0%, transparent 60%);
   opacity: 0;
   transition: opacity var(--duration-fast) ease-out;
   pointer-events: none;
@@ -454,9 +465,6 @@
   background: #000 !important;
 }
 
-/* Video element inside fullscreen MUST fill the entire container.
-   object-fit is inherited from Tailwind classes (object-contain / object-cover / object-fill)
-   so the Screen Fit toggle continues to work correctly. */
 .player-fullscreen-mode video {
   position: absolute !important;
   top: 0 !important;
@@ -465,24 +473,47 @@
   height: 100% !important;
   max-width: none !important;
   max-height: none !important;
-  /* Default fallback — Tailwind classes override this when the fit mode toggle is used */
-  object-fit: contain;
+}
+
+.player-fullscreen-mode video[data-fit="cover"],
+.player-fullscreen-mode video.object-cover,
+video[data-fit="cover"],
+video.object-cover {
+  object-fit: cover !important;
+}
+
+.player-fullscreen-mode video[data-fit="fill"],
+.player-fullscreen-mode video.object-fill,
+video[data-fit="fill"],
+video.object-fill {
+  object-fit: fill !important;
+}
+
+.player-fullscreen-mode video[data-fit="contain"],
+.player-fullscreen-mode video.object-contain,
+video[data-fit="contain"],
+video.object-contain {
+  object-fit: contain !important;
 }
 
 /* Landscape-specific: additional insurance for device rotation */
 @media (orientation: landscape) {
   .player-fullscreen-mode {
-    /* Override any residual safe-area padding from inline styles */
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    width: 100dvw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
   }
 
   .player-fullscreen-mode video {
-    /* Stay within the container instead of overflowing to viewport units */
     width: 100% !important;
     height: 100% !important;
+    min-width: 100% !important;
+    min-height: 100% !important;
   }
 }
 
@@ -553,6 +584,25 @@ video::-webkit-media-controls-start-playback-button {
 /* Instant touch responsiveness without 300ms mobile delay */
 button, [role="button"], a {
   touch-action: manipulation;
+}
+
+/* ============================================================
+   Electric Midnight Stitch Design Utilities
+   ============================================================ */
+.radial-sapphire-glow {
+  background: radial-gradient(circle at 50% 15%, rgba(23, 107, 255, 0.16) 0%, rgba(0, 210, 255, 0.04) 45%, transparent 75%);
+}
+
+.hero-vignette {
+  background: linear-gradient(180deg, rgba(6, 9, 17, 0.15) 0%, rgba(6, 9, 17, 0.5) 45%, rgba(6, 9, 17, 0.94) 80%, #060911 100%);
+}
+
+.glow-cyan {
+  box-shadow: 0px 8px 24px -4px rgba(23, 107, 255, 0.55), 0px 0px 12px rgba(0, 210, 255, 0.3);
+}
+
+.glow-pill {
+  box-shadow: 0 0 14px rgba(23, 107, 255, 0.6);
 }
 
 /* NOTE: scroll-snap-x already defined above (line ~383) — removed duplicate */

@@ -1,22 +1,24 @@
 {
-  "latestVersionCode": 2670,
-  "latestVersionName": "2.6.7",
+  "latestVersionCode": 2680,
+  "latestVersionName": "2.6.8",
   "websiteUrl": "https://cinevaultapk.online/",
   "apkDownloadUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "directApkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
-  "updateMessage": "Push Notifications support & instant Telegram alerts",
+  "updateMessage": "New Edge-to-Edge Full Screen player, Screen Lock, edge scrollbars & smooth performance",
   "forceUpdate": true,
-  "version": "2.6.7",
-  "versionCode": 2670,
-  "releaseDate": "2026-09-27",
+  "version": "2.6.8",
+  "versionCode": 2680,
+  "releaseDate": "2026-09-29",
   "changelog": [
-    "Push Notifications support & instant Telegram alerts",
-    "Star Sports Hindi Cricket live streaming fixes"
+    "Edge-to-edge full screen video player for all mobile devices",
+    "Screen Lock button & 3 Screen Fit modes (Full Screen, Fill Screen, Fit Screen)",
+    "Slim edge brightness & volume scrollbars with top percentage indicator",
+    "Single unified loading spinner with zero UI conflicts",
+    "60-120 FPS hardware-accelerated playback performance"
   ],
   "apkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "mandatory": true,
   "minVersion": "2.0.0",
-  "sha256": "96fbb78a17773469601a15ad2066b44ae9533542dfc8f9670acc4cc8ad60671c",
-  "fileSizeBytes": 11409561,
-  "fileSizeMB": "10.9MB"
+  "fileSizeBytes": 11622286,
+  "fileSizeMB": "11.1MB"
 }
