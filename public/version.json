@@ -4,7 +4,7 @@
   "websiteUrl": "https://cinevaultapk.online/",
   "apkDownloadUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "directApkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
-  "updateMessage": "New Edge-to-Edge Full Screen player, Screen Lock, edge scrollbars & smooth performance",
+  "updateMessage": "Edge-to-edge full screen video player for all mobile devices",
   "forceUpdate": true,
   "version": "2.6.8",
   "versionCode": 2680,
@@ -19,6 +19,7 @@
   "apkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "mandatory": true,
   "minVersion": "2.0.0",
-  "fileSizeBytes": 11622286,
-  "fileSizeMB": "11.1MB"
+  "sha256": "b439f410d6ca17f45bd82aaf3e7143667d8a2b29cd3c8266b02b510df9a3fdc6",
+  "fileSizeBytes": 11416928,
+  "fileSizeMB": "10.9MB"
 }
