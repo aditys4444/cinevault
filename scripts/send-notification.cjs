@@ -71,6 +71,7 @@ async function main() {
 
     if (targetUrl) {
       payload.url = targetUrl;
+      payload.data = { url: targetUrl, link: targetUrl };
     }
 
     const response = await fetch('https://onesignal.com/api/v1/notifications', {
