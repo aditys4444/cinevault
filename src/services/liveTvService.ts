@@ -165,7 +165,7 @@ export const LIVE_CATEGORIES: CategoryNiche[] = [
   }
 ];
 
-export const LIVE_CHANNELS: LiveChannel[] = [
+const BUNDLED_CHANNELS: LiveChannel[] = [
   {
     "id": "sony-tv-hd",
     "name": "Sony Entertainment Television",
@@ -1611,6 +1611,72 @@ export const LIVE_CHANNELS: LiveChannel[] = [
   }
 ];
 
+const REMOTE_CHANNELS_KEY = 'cinevault_remote_channels';
+const CHANNELS_ENDPOINTS = [
+  'https://cinevaultapk.online/api/channels.json',
+  'https://cinevault-web.pages.dev/api/channels.json',
+];
+
+type ChannelListener = (channels: LiveChannel[]) => void;
+const channelListeners = new Set<ChannelListener>();
+
+function loadInitialChannels(): LiveChannel[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const cached = localStorage.getItem(REMOTE_CHANNELS_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    }
+  } catch {}
+  return BUNDLED_CHANNELS;
+}
+
+export let LIVE_CHANNELS: LiveChannel[] = loadInitialChannels();
+
+export const subscribeToChannels = (listener: ChannelListener): (() => void) => {
+  channelListeners.add(listener);
+  return () => channelListeners.delete(listener);
+};
+
+export const syncRemoteChannels = async (): Promise<LiveChannel[]> => {
+  for (const endpoint of CHANNELS_ENDPOINTS) {
+    try {
+      const url = `${endpoint}?_t=${Date.now()}`;
+      const res = await fetch(url, {
+        cache: 'no-cache',
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          LIVE_CHANNELS = data;
+          try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+              localStorage.setItem(REMOTE_CHANNELS_KEY, JSON.stringify(data));
+            }
+          } catch {}
+          channelListeners.forEach((fn) => {
+            try { fn(LIVE_CHANNELS); } catch {}
+          });
+          return LIVE_CHANNELS;
+        }
+      }
+    } catch {}
+  }
+  return LIVE_CHANNELS;
+};
+
+// Automatic non-blocking background sync on app start
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    syncRemoteChannels().catch(() => {});
+  }, 1000);
+}
+
 export const getAllChannels = (): LiveChannel[] => {
   return LIVE_CHANNELS;
 };
@@ -1646,4 +1712,7 @@ export const liveTvService = {
   getPopularChannels,
   searchChannels,
   getChannelById,
+  subscribe: subscribeToChannels,
+  syncRemoteChannels,
 };
+

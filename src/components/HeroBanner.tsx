@@ -262,9 +262,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = memo(({
         </div>
       </div>
 
-      {/* Slide Navigation Dots / Indicator Capsules */}
+      {/* Slide Navigation Dots / Indicator Capsules (Top-right on mobile to prevent overlapping buttons, bottom-right on desktop) */}
       {candidateList.length > 1 && (
-        <div className="absolute bottom-5 right-4 sm:right-8 z-20 flex items-center gap-1.5 bg-[#060911]/60 px-2.5 py-1.5 rounded-full border border-white/[0.08] backdrop-blur-md">
+        <div className="absolute top-4 right-4 sm:top-auto sm:bottom-5 sm:right-8 z-20 flex items-center gap-1.5 bg-[#060911]/80 px-2.5 py-1.5 rounded-full border border-white/[0.1]">
           {candidateList.map((m, idx) => (
             <button
               key={`${m.id}_${idx}`}

@@ -1,6 +1,10 @@
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import type { Movie } from '../types/movie';
-import { ADULT_HOME_CATALOG } from '../data/adultCatalog';
+import {
+  getAdultCatalog,
+  subscribeToAdultCatalog,
+  syncRemoteAdultCatalog,
+} from '../data/adultCatalog';
 import { HeroBanner } from './HeroBanner';
 import { MovieRow } from './MovieRow';
 import { Flame, X } from 'lucide-react';
@@ -16,18 +20,46 @@ export const AdultHomeView: React.FC<AdultHomeViewProps> = memo(({
   onSelectMovie,
   onExitAdultMode,
 }) => {
+  const [catalog, setCatalog] = useState(() => getAdultCatalog());
   const [activeCategory, setActiveCategory] = useState<string>('all');
 
+  useEffect(() => {
+    const unsubscribe = subscribeToAdultCatalog((updated) => {
+      if (updated && Array.isArray(updated.rows)) {
+        setCatalog(updated);
+      }
+    });
+    syncRemoteAdultCatalog().catch(() => {});
+    return unsubscribe;
+  }, []);
+
   const filteredRows = useMemo(() => {
-    if (activeCategory === 'all') return ADULT_HOME_CATALOG.rows;
-    return ADULT_HOME_CATALOG.rows.filter((shelf) => shelf.id === activeCategory);
+    if (activeCategory === 'all') return catalog.rows;
+    return catalog.rows.filter((shelf) => shelf.id === activeCategory);
+  }, [activeCategory, catalog]);
+
+  // High-Performance Progressive Shelf Rendering for Low & Mid-tier Devices:
+  // Render top 4 shelves immediately (0ms instant paint), then smoothly batch remaining shelves
+  const [renderedShelfCount, setRenderedShelfCount] = useState<number>(4);
+
+  // Reset to initial batch whenever user switches category filter tabs
+  useEffect(() => {
+    setRenderedShelfCount(4);
   }, [activeCategory]);
+
+  useEffect(() => {
+    if (renderedShelfCount >= filteredRows.length) return;
+    const timer = setTimeout(() => {
+      setRenderedShelfCount((prev) => Math.min(prev + 4, filteredRows.length));
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [renderedShelfCount, filteredRows.length]);
 
   return (
     <div className="view-transition-enter space-y-4">
-      {/* 18+ Mode Indicator Bar */}
+      {/* 18+ Mode Indicator Bar (High-performance solid gradient without compositor blur) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 pt-3">
-        <div className="flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-red-950/40 via-[#0B1224] to-[#0B1224] border border-red-500/30 shadow-lg backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-red-950/70 via-[#0B1224] to-[#0B1224] border border-red-500/30 shadow-lg">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
               <Flame className="w-4 h-4 animate-pulse" />
@@ -60,13 +92,13 @@ export const AdultHomeView: React.FC<AdultHomeViewProps> = memo(({
       </div>
 
       {/* Featured 18+ Premiere Carousel */}
-      {ADULT_HOME_CATALOG.featured && (
+      {catalog.featured && (
         <HeroBanner
           movies={[
-            ADULT_HOME_CATALOG.featured,
-            ...(ADULT_HOME_CATALOG.rows[0]?.items || []).slice(0, 6),
+            catalog.featured,
+            ...(catalog.rows[0]?.items || []).slice(0, 6),
           ]}
-          movie={ADULT_HOME_CATALOG.featured}
+          movie={catalog.featured}
           onPlayMovie={onPlayMovie}
           onSelectMovie={onSelectMovie}
         />
@@ -84,10 +116,10 @@ export const AdultHomeView: React.FC<AdultHomeViewProps> = memo(({
                 : 'bg-[#0E172B] text-[#8D9AB5] hover:text-[#F5F7FF] hover:bg-[#16223D] border border-white/[0.08]'
             }`}
           >
-            All 18+ Titles ({ADULT_HOME_CATALOG.total_titles})
+            All 18+ Titles ({catalog.total_titles || 0})
           </button>
 
-          {ADULT_HOME_CATALOG.rows.map((shelf) => (
+          {catalog.rows.map((shelf) => (
             <button
               key={shelf.id}
               type="button"
@@ -104,9 +136,9 @@ export const AdultHomeView: React.FC<AdultHomeViewProps> = memo(({
         </div>
       </div>
 
-      {/* Categorized 18+ Content Rows */}
+      {/* Categorized 18+ Content Rows (Progressively Revealed) */}
       <div className="mt-2 space-y-2">
-        {filteredRows.map((shelf, idx) => (
+        {filteredRows.slice(0, renderedShelfCount).map((shelf, idx) => (
           <MovieRow
             key={shelf.id}
             shelf={shelf}

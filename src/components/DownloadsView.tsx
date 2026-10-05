@@ -54,12 +54,10 @@ export const DownloadsView: React.FC<DownloadsViewProps> = memo(({
         try {
           playUrl = (window as any).AndroidDevice.getProxyVideoUrl(item.localPath);
         } catch {
-          const port = (window as any).AndroidDevice?.getLocalProxyPort?.() || 8888;
-          playUrl = `http://127.0.0.1:${port}/local_media?path=${encodeURIComponent(item.localPath)}`;
+          playUrl = `https://localhost/local_media?path=${encodeURIComponent(item.localPath)}`;
         }
       } else {
-        const port = typeof window !== 'undefined' && (window as any).AndroidDevice?.getLocalProxyPort?.() ? (window as any).AndroidDevice.getLocalProxyPort() : 8888;
-        playUrl = `http://127.0.0.1:${port}/local_media?path=${encodeURIComponent(item.localPath)}`;
+        playUrl = `https://localhost/local_media?path=${encodeURIComponent(item.localPath)}`;
       }
     }
     const movieToPlay: Movie = {

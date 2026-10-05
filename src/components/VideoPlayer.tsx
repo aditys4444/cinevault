@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import type { Movie, StreamResponse, Season } from '../types/movie';
+import type { Movie, StreamResponse, Season, CaptionTrack } from '../types/movie';
 import { movieboxService } from '../services/movieboxService';
 import { cacheService } from '../services/cacheService';
 import {
@@ -29,7 +29,11 @@ import {
   Scan,
   Lock,
   Unlock,
+  PictureInPicture,
+  Subtitles,
+  Download,
 } from 'lucide-react';
+import { DownloadQualityModal } from './DownloadQualityModal';
 
 // Format Time (hh:mm:ss or mm:ss)
 const formatTime = (secs: number) => {
@@ -321,6 +325,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState<number>(0);
 
+  // Picture-in-Picture & Captions State
+  const [isInPip, setIsInPip] = useState<boolean>(false);
+  const [captions, setCaptions] = useState<CaptionTrack[]>([]);
+  const [nativeTracks, setNativeTracks] = useState<{ id: string; label: string; language: string }[]>([]);
+  const [selectedCaption, setSelectedCaption] = useState<string>(() => {
+    try {
+      return localStorage.getItem('cinevault_preferred_caption_lang') || 'off';
+    } catch {
+      return 'off';
+    }
+  });
+  const [isCaptionMenuOpen, setIsCaptionMenuOpen] = useState<boolean>(false);
+
   // Screen Brightness, Fit Mode & Gesture Navigation State
   const [brightness, setBrightness] = useState<number>(() => {
     try {
@@ -334,11 +351,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     try {
       const saved = localStorage.getItem('cinevault_player_fit');
       if (saved === 'contain' || saved === 'cover' || saved === 'fill') return saved;
-      return 'cover';
+      return 'contain';
     } catch {
-      return 'cover';
+      return 'contain';
     }
   });
+  // Portrait mode MUST always use 'contain' to prevent video stretching or 70% side-cropping
+  const effectiveFitMode: 'contain' | 'cover' | 'fill' = isFullscreen ? fitMode : 'contain';
   const [activeGesture, setActiveGesture] = useState<'brightness' | 'volume' | null>(null);
   const [gestureValue, setGestureValue] = useState<number>(100);
   const [isLocked, setIsLocked] = useState<boolean>(false);
@@ -636,6 +655,100 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     };
   }, [isMinimized]);
 
+  // Picture-in-Picture trigger
+  const triggerPictureInPicture = useCallback(async () => {
+    try {
+      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.enterPipMode) {
+        const handled = (window as any).AndroidDevice.enterPipMode();
+        if (handled) return;
+      }
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (videoRef.current && document.pictureInPictureEnabled) {
+        await videoRef.current.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.warn('Picture-in-picture error:', err);
+    }
+  }, []);
+
+  // Back to app handler: smoothly returns to browsing/mini-player in app WITHOUT forcing OS Picture in Picture
+  const handleBackToApp = useCallback(() => {
+    if (isFullscreen) {
+      setIsFullscreen(false);
+      setFitMode('contain');
+      exitLandscape();
+      return;
+    }
+
+    if (onMinimize) {
+      onMinimize();
+    } else {
+      onBack();
+    }
+  }, [isFullscreen, exitLandscape, onMinimize, onBack]);
+
+  // Download modal state
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+
+  const handleOpenDownloadModal = useCallback(() => {
+    if (navigator.vibrate) navigator.vibrate(8);
+    setIsDownloadModalOpen(true);
+  }, []);
+
+  const handleSelectPlayerDownloadQuality = useCallback(async (q: any) => {
+    setIsDownloadModalOpen(false);
+    const cleanQ = q.quality?.replace(/ Direct.*/i, '') || 'HD';
+    try {
+      await cacheService.startDownload(
+        currentMovie,
+        q.url,
+        cleanQ,
+        isTv ? currentSeason : undefined,
+        isTv ? currentEpisode : undefined
+      );
+      showToast(`Download started in ${cleanQ}! Check Downloads tab.`);
+    } catch (err: any) {
+      showToast(err?.message || 'Download failed to start');
+    }
+  }, [currentMovie, isTv, currentSeason, currentEpisode, showToast]);
+
+  // Sync Picture in Picture state & events
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onEnterPip = () => setIsInPip(true);
+    const onLeavePip = () => {
+      setIsInPip(false);
+      onRestore?.();
+    };
+    video.addEventListener('enterpictureinpicture', onEnterPip);
+    video.addEventListener('leavepictureinpicture', onLeavePip);
+    const onNativePipChange = (e: any) => {
+      const inPip = Boolean(e?.detail?.inPip);
+      setIsInPip(inPip);
+      if (!inPip) {
+        onRestore?.();
+      }
+    };
+    window.addEventListener('pipmodechange', onNativePipChange);
+    return () => {
+      video.removeEventListener('enterpictureinpicture', onEnterPip);
+      video.removeEventListener('leavepictureinpicture', onLeavePip);
+      window.removeEventListener('pipmodechange', onNativePipChange);
+    };
+  }, [onRestore]);
+
+  // Register global PiP triggers for Android onUserLeaveHint (entering PiP when exiting app directly)
+  useEffect(() => {
+    (window as any).__cinevaultCanAutoPip = () => isPlaying && !error;
+    (window as any).__cinevaultTriggerPip = triggerPictureInPicture;
+    return () => {
+      delete (window as any).__cinevaultCanAutoPip;
+      delete (window as any).__cinevaultTriggerPip;
+    };
+  }, [isPlaying, error, triggerPictureInPicture]);
+
   // Intercept Android hardware Back button when in VideoPlayer
   useEffect(() => {
     if (isMinimized) return;
@@ -648,11 +761,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         exitLandscape();
         return true;
       }
-      if (onMinimize) {
-        onMinimize();
-        return true;
-      }
-      onBack();
+      handleBackToApp();
       return true;
     };
 
@@ -662,7 +771,124 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         delete (window as any).handleAndroidBack;
       }
     };
-  }, [isFullscreen, isMinimized, exitLandscape, onMinimize, onBack]);
+  }, [isFullscreen, isMinimized, exitLandscape, handleBackToApp]);
+
+  // Fetch available captions / subtitles from MovieBox API
+  useEffect(() => {
+    let isMounted = true;
+    if (!currentMovie.id) return;
+    movieboxService
+      .getCaptions(currentMovie.id, isTv ? currentSeason : 0, isTv ? currentEpisode : 0)
+      .then((data) => {
+        if (isMounted && Array.isArray(data)) {
+          setCaptions(data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [currentMovie.id, currentSeason, currentEpisode, isTv]);
+
+  // Track native textTracks on video element
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const updateTracks = () => {
+      if (video.textTracks && video.textTracks.length > 0) {
+        const arr = [];
+        for (let i = 0; i < video.textTracks.length; i++) {
+          const t = video.textTracks[i];
+          arr.push({
+            id: `native_${i}_${t.language || t.label}`,
+            label: t.label || t.language || `Track ${i + 1}`,
+            language: t.language || 'en',
+          });
+        }
+        setNativeTracks(arr);
+      }
+    };
+    video.addEventListener('loadedmetadata', updateTracks);
+    if (video.textTracks) {
+      video.textTracks.addEventListener('change', updateTracks);
+    }
+    return () => {
+      video.removeEventListener('loadedmetadata', updateTracks);
+      if (video.textTracks) {
+        video.textTracks.removeEventListener('change', updateTracks);
+      }
+    };
+  }, []);
+
+  // Normalized available captions list
+  const availableCaptionTracks = useMemo(() => {
+    const list: { id: string; label: string; language: string; type: 'remote' | 'native'; url?: string }[] = [];
+    const seen = new Set<string>();
+
+    for (const c of captions) {
+      const key = (c.language || c.label || '').toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({
+          id: c.id,
+          label: c.label || c.language,
+          language: c.language,
+          type: 'remote',
+          url: c.url,
+        });
+      }
+    }
+
+    for (const nt of nativeTracks) {
+      const key = (nt.language || nt.label || '').toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({
+          id: nt.id,
+          label: nt.label,
+          language: nt.language,
+          type: 'native',
+        });
+      }
+    }
+
+    return list;
+  }, [captions, nativeTracks]);
+
+  const hasCaptions = availableCaptionTracks.length > 0;
+
+  // Handle selecting a caption track
+  const handleSelectCaption = useCallback((trackId: string, trackLabel?: string) => {
+    setSelectedCaption(trackId);
+    try {
+      localStorage.setItem('cinevault_preferred_caption_lang', trackId);
+    } catch {}
+
+    const video = videoRef.current;
+    if (trackId === 'off') {
+      if (video && video.textTracks) {
+        for (let i = 0; i < video.textTracks.length; i++) {
+          video.textTracks[i].mode = 'disabled';
+        }
+      }
+      showToast('Captions Off');
+      setIsCaptionMenuOpen(false);
+      return;
+    }
+
+    if (video && video.textTracks) {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        const t = video.textTracks[i];
+        if (t.label === trackLabel || t.language === trackId || trackId.includes(t.language)) {
+          t.mode = 'showing';
+        } else {
+          t.mode = 'disabled';
+        }
+      }
+    }
+    showToast(`Captions: ${trackLabel || trackId}`);
+    setIsCaptionMenuOpen(false);
+  }, [showToast]);
 
   // Handle Background Scroll Locking
   useEffect(() => {
@@ -722,12 +948,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
           try {
             directOfflineUrl = (window as any).AndroidDevice.getProxyVideoUrl(found.localPath);
           } catch {
-            const port = (window as any).AndroidDevice?.getLocalProxyPort?.() || 8888;
-            directOfflineUrl = `http://127.0.0.1:${port}/local_media?path=${encodeURIComponent(found.localPath)}`;
+            directOfflineUrl = `https://localhost/local_media?path=${encodeURIComponent(found.localPath)}`;
           }
         } else {
-          const port = typeof window !== 'undefined' && (window as any).AndroidDevice?.getLocalProxyPort?.() ? (window as any).AndroidDevice.getLocalProxyPort() : 8888;
-          directOfflineUrl = `http://127.0.0.1:${port}/local_media?path=${encodeURIComponent(found.localPath)}`;
+          directOfflineUrl = `https://localhost/local_media?path=${encodeURIComponent(found.localPath)}`;
         }
       }
     } catch {}
@@ -737,6 +961,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         currentMovie.streamUrl.includes('cinevault.local') ||
         currentMovie.streamUrl.includes('localhost') ||
         currentMovie.streamUrl.includes('127.0.0.1') ||
+        currentMovie.streamUrl.includes('local_media') ||
         currentMovie.streamUrl.startsWith('file:') ||
         currentMovie.streamUrl.startsWith('blob:');
       if (isLocal) directOfflineUrl = currentMovie.streamUrl;
@@ -779,7 +1004,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     const queryEpisode = isTv ? Math.max(1, currentEpisode) : 0;
 
     movieboxService
-      .getStreams(currentMovie.id, currentMovie.detailPath, queryMediaType, querySeason, queryEpisode, currentMovie.title)
+      .getStreams(currentMovie.id, currentMovie.detailPath, queryMediaType, querySeason, queryEpisode, currentMovie.title, retryCount > 0)
       .then((res) => {
         clearTimeout(timeout);
         if (!isMounted) return;
@@ -1145,6 +1370,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
     // Auto-fallback: if local offline file is missing/unreadable, fall back to online stream seamlessly
     if (selectedQuality === 'Offline HD' || activeStreamUrl?.includes('local_media')) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setIsBuffering(false);
+        setLoading(false);
+        setError('Downloaded offline file cannot be played. Check device storage or re-download.');
+        return;
+      }
       setSelectedQuality('Auto');
       resolvedSessionRef.current = '';
       setStreamInfo(null);
@@ -1256,18 +1487,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       showToast('Screen is Locked • Tap Unlock to restore');
       return;
     }
-    if (isQualityMenuOpen || isSpeedMenuOpen || isEpisodesMenuOpen || isLanguageMenuOpen) {
+    if (isQualityMenuOpen || isSpeedMenuOpen || isEpisodesMenuOpen || isLanguageMenuOpen || isCaptionMenuOpen) {
       setIsQualityMenuOpen(false);
       setIsSpeedMenuOpen(false);
       setIsEpisodesMenuOpen(false);
       setIsLanguageMenuOpen(false);
+      setIsCaptionMenuOpen(false);
       return;
     }
 
     const now = Date.now();
-    if (now - lastTapRef.current < 280) {
+    if (now - lastTapRef.current < 300) {
       lastTapRef.current = 0;
-      cycleFitMode();
+      const clientX = e.clientX;
+      const width = window.innerWidth || document.documentElement.clientWidth;
+      if (clientX < width * 0.4) {
+        handleSkip(-10);
+        showToast('Rewind 10s');
+      } else if (clientX > width * 0.6) {
+        handleSkip(10);
+        showToast('Forward 10s');
+      } else {
+        togglePlayPause();
+      }
       return;
     }
     lastTapRef.current = now;
@@ -1346,6 +1588,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   // Aspect Ratio Fit Mode Cycler (Fit Screen -> Full Screen -> Fill Screen)
   const cycleFitMode = useCallback(() => {
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
+    if (!isFullscreen) {
+      enterLandscape();
+      return;
+    }
     setFitMode((prev) => {
       let next: 'contain' | 'cover' | 'fill' = 'contain';
       let label = '';
@@ -1365,7 +1611,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       showToast(label);
       return next;
     });
-  }, [showToast]);
+  }, [isFullscreen, enterLandscape, showToast]);
 
   // Touch Gesture Handlers for Brightness (Left half) and Volume (Right half)
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -1515,16 +1761,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
           onSeeked={handleSeeked}
           onError={handleVideoError}
           poster={movie.backdrop || movie.poster || undefined}
-          data-fit={fitMode}
-          style={{ objectFit: fitMode, transform: 'translateZ(0)', willChange: 'transform' }}
+          data-fit={effectiveFitMode}
+          style={{ objectFit: effectiveFitMode, transform: 'translateZ(0)', willChange: 'transform' }}
           className={`w-full h-full transition-[object-fit] duration-150 ${
-            fitMode === 'cover'
+            effectiveFitMode === 'cover'
               ? 'object-cover'
-              : fitMode === 'fill'
+              : effectiveFitMode === 'fill'
               ? 'object-fill'
               : 'object-contain'
           }`}
-        />
+        >
+          {captions.map((cap) => (
+            <track
+              key={cap.id}
+              kind="subtitles"
+              src={cap.url}
+              srcLang={cap.language.slice(0, 2).toLowerCase()}
+              label={cap.label}
+              default={selectedCaption === cap.id}
+            />
+          ))}
+        </video>
 
         {/* Hardware-accelerated Software Brightness Scrim */}
         {!isMinimized && (
@@ -1625,6 +1882,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
               title={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                triggerPictureInPicture();
+              }}
+              className="w-9 h-9 rounded-full bg-[#0E172B] hover:bg-[#16223D] border border-white/[0.08] text-[#8D9AB5] hover:text-[#35A7FF] flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+              title="Picture in Picture"
+            >
+              <PictureInPicture className="w-3.5 h-3.5" />
             </button>
 
             <button
@@ -1793,23 +2062,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         >
           {/* Top Bar: Spans 100% full width with device safe-area insets */}
           <div
-            className="w-full flex items-center justify-between pointer-events-auto bg-gradient-to-b from-black/95 via-black/60 to-transparent pt-3 pb-6 px-4 sm:px-8 gap-3"
+            className="w-full flex items-center justify-between pointer-events-auto bg-gradient-to-b from-black/95 via-black/60 to-transparent pt-3 pb-6 px-3 sm:px-8 gap-2 sm:gap-3"
             style={{
-              paddingTop: 'max(12px, env(safe-area-inset-top, 12px))',
+              paddingTop: 'max(16px, calc(env(safe-area-inset-top, 0px) + 8px))',
               paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
               paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
             }}
           >
             {/* Left: Back / Minimize & Title */}
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onMinimize) onMinimize();
-                  else onBack();
+                  handleBackToApp();
                 }}
-                className="w-10 h-10 rounded-full bg-[#0B1224]/80 hover:bg-[#16223D] active:bg-[#050A18] border border-white/[0.08] text-white flex items-center justify-center cursor-pointer transition-colors press-feedback flex-shrink-0"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#0B1224]/80 hover:bg-[#16223D] active:bg-[#050A18] border border-white/[0.08] text-white flex items-center justify-center cursor-pointer transition-colors press-feedback flex-shrink-0"
                 title="Minimize player"
                 aria-label="Minimize"
               >
@@ -1817,7 +2085,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
               </button>
 
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   <h2 className="text-xs sm:text-sm md:text-base font-bold text-[#F5F7FF] truncate font-headline">
                     {currentMovie.title}
                   </h2>
@@ -1846,56 +2114,55 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
               </div>
             </div>
 
-            {/* Right: Audio Language (Always) + Speed & Quality (Landscape) */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {/* Playback Speed Menu - Landscape / Fullscreen Only */}
-              {isFullscreen && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsSpeedMenuOpen((prev) => !prev);
-                      setIsQualityMenuOpen(false);
-                      setIsLanguageMenuOpen(false);
-                      setIsEpisodesMenuOpen(false);
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
-                    title="Playback Speed"
+            {/* Right: Audio Language, CC Subtitles, Quality, Speed & PiP (Available in ALL orientations) */}
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+              {/* Playback Speed Menu */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsSpeedMenuOpen((prev) => !prev);
+                    setIsQualityMenuOpen(false);
+                    setIsLanguageMenuOpen(false);
+                    setIsEpisodesMenuOpen(false);
+                    setIsCaptionMenuOpen(false);
+                  }}
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
+                  title="Playback Speed"
+                >
+                  <Gauge className="w-3.5 h-3.5 text-[#35A7FF]" />
+                  <span className="font-mono text-[11px] hidden xs:inline">{playbackSpeed}x</span>
+                </button>
+
+                {isSpeedMenuOpen && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-0 top-full mt-2 w-32 bg-[#0B1224] border border-white/[0.08] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in"
                   >
-                    <Gauge className="w-3.5 h-3.5 text-[#35A7FF]" />
-                    <span className="font-mono text-[11px]">{playbackSpeed}x</span>
-                  </button>
-
-                  {isSpeedMenuOpen && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-full mt-2 w-32 bg-[#0B1224] border border-white/[0.08] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in"
-                    >
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono">
-                        Speed
-                      </div>
-                      {[0.75, 1.0, 1.25, 1.5, 2.0].map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => handleSelectSpeed(s)}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                            playbackSpeed === s
-                              ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
-                              : 'text-gray-300 hover:bg-[#16223D]'
-                          }`}
-                        >
-                          <span>{s === 1 ? 'Normal' : `${s}x`}</span>
-                          {playbackSpeed === s && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
-                        </button>
-                      ))}
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono">
+                      Speed
                     </div>
-                  )}
-                </div>
-              )}
+                    {[0.75, 1.0, 1.25, 1.5, 2.0].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => handleSelectSpeed(s)}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                          playbackSpeed === s
+                            ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                            : 'text-gray-300 hover:bg-[#16223D]'
+                        }`}
+                      >
+                        <span>{s === 1 ? 'Normal' : `${s}x`}</span>
+                        {playbackSpeed === s && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-              {/* Language Menu (Always available on player) */}
+              {/* Language Menu */}
               <div className="relative">
                 <button
                   type="button"
@@ -1905,12 +2172,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                     setIsQualityMenuOpen(false);
                     setIsSpeedMenuOpen(false);
                     setIsEpisodesMenuOpen(false);
+                    setIsCaptionMenuOpen(false);
                   }}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
                   title="Audio Language"
                 >
                   <Languages className="w-3.5 h-3.5 text-[#35A7FF]" />
-                  <span className="font-mono text-[11px] truncate max-w-[70px] sm:max-w-[90px]">
+                  <span className="font-mono text-[11px] truncate max-w-[55px] sm:max-w-[90px]">
                     {selectedLanguage || 'Audio'}
                   </span>
                 </button>
@@ -1960,8 +2228,81 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 )}
               </div>
 
-              {/* Quality Menu - Landscape / Fullscreen Only */}
-              {isFullscreen && streamInfo?.qualities && streamInfo.qualities.length > 0 && (
+              {/* Captions / Subtitles Menu (Visible for contents that have captions) */}
+              {hasCaptions && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsCaptionMenuOpen((prev) => !prev);
+                      setIsQualityMenuOpen(false);
+                      setIsSpeedMenuOpen(false);
+                      setIsLanguageMenuOpen(false);
+                      setIsEpisodesMenuOpen(false);
+                    }}
+                    className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors min-h-[36px] ${
+                      selectedCaption !== 'off'
+                        ? 'bg-[#176BFF]/25 border-[#35A7FF]/60 text-[#35A7FF]'
+                        : 'bg-[#0B1224]/90 hover:bg-[#16223D] border-white/[0.08] text-[#F5F7FF]'
+                    }`}
+                    title="Captions / Subtitles"
+                    aria-label="Subtitles & Captions"
+                  >
+                    <Subtitles className="w-3.5 h-3.5 text-[#35A7FF]" />
+                    <span className="font-mono text-[11px] truncate max-w-[45px] sm:max-w-[70px]">
+                      {selectedCaption === 'off'
+                        ? 'CC'
+                        : (availableCaptionTracks.find((t) => t.id === selectedCaption || t.language === selectedCaption)?.label || 'CC')}
+                    </span>
+                  </button>
+
+                  {isCaptionMenuOpen && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-full mt-2 w-48 max-h-60 overflow-y-auto bg-[#0B1224] border border-white/[0.08] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-fade-in custom-scrollbar"
+                    >
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono">
+                        Subtitles / CC
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectCaption('off')}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                          selectedCaption === 'off'
+                            ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                            : 'text-gray-300 hover:bg-[#16223D]'
+                        }`}
+                      >
+                        <span>Off</span>
+                        {selectedCaption === 'off' && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
+                      </button>
+
+                      {availableCaptionTracks.map((track) => {
+                        const isSelected = selectedCaption === track.id || selectedCaption === track.language;
+                        return (
+                          <button
+                            key={track.id}
+                            type="button"
+                            onClick={() => handleSelectCaption(track.id, track.label)}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                                : 'text-gray-300 hover:bg-[#16223D]'
+                            }`}
+                          >
+                            <span className="truncate">{track.label}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quality Menu - Available in ALL orientations */}
+              {streamInfo?.qualities && streamInfo.qualities.length > 0 && (
                 <div className="relative">
                   <button
                     type="button"
@@ -1971,12 +2312,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                       setIsSpeedMenuOpen(false);
                       setIsLanguageMenuOpen(false);
                       setIsEpisodesMenuOpen(false);
+                      setIsCaptionMenuOpen(false);
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
+                    className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
                     title="Video Quality"
                   >
                     <Sliders className="w-3.5 h-3.5 text-[#35A7FF]" />
-                    <span className="font-mono text-[11px]">{selectedQuality.replace(/ Direct.*/i, '')}</span>
+                    <span className="font-mono text-[11px] truncate max-w-[55px] sm:max-w-[85px]">{selectedQuality.replace(/ Direct.*/i, '')}</span>
                   </button>
 
                   {isQualityMenuOpen && (
@@ -2018,6 +2360,42 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Picture-in-Picture Quick Toggle */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  triggerPictureInPicture();
+                }}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors min-h-[36px] ${
+                  isInPip
+                    ? 'bg-[#176BFF]/25 border-[#35A7FF]/60 text-[#35A7FF]'
+                    : 'bg-[#0B1224]/90 hover:bg-[#16223D] border-white/[0.08] text-[#F5F7FF]'
+                }`}
+                title="Picture-in-Picture"
+                aria-label="Picture in Picture"
+              >
+                <PictureInPicture className="w-3.5 h-3.5 text-[#35A7FF]" />
+                <span className="font-mono text-[11px] hidden xs:inline">{isInPip ? 'In PiP' : 'PiP'}</span>
+              </button>
+
+              {/* Quick Download Selector */}
+              {selectedQuality !== 'Offline HD' && streamInfo?.qualities && streamInfo.qualities.length > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenDownloadModal();
+                  }}
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl border border-white/[0.08] bg-[#0B1224]/90 hover:bg-[#16223D] text-[#F5F7FF] text-xs font-semibold cursor-pointer transition-colors min-h-[36px]"
+                  title="Download Video"
+                  aria-label="Download Video"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#35A7FF]" />
+                  <span className="font-mono text-[11px] hidden xs:inline">Download</span>
+                </button>
               )}
             </div>
           </div>
@@ -2217,8 +2595,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                 )}
               </div>
 
-              {/* Right Controls: Screen Fit (Landscape only), TV Episodes Switcher & Fullscreen */}
-              <div className="flex items-center gap-2">
+              {/* Right Controls: Screen Fit, TV Episodes Switcher & Fullscreen */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 {/* Screen Aspect Ratio Fit Toggle - Available in ALL orientations */}
                 <button
                   type="button"
@@ -2226,12 +2604,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                     e.stopPropagation();
                     cycleFitMode();
                   }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0E1726]/90 hover:bg-[#16223D] active:bg-[#060911] border border-white/10 text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
+                  className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#0E1726]/90 hover:bg-[#16223D] active:bg-[#060911] border border-white/10 text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px] shrink-0"
                   title={`Screen Fit: ${fitMode === 'contain' ? 'Fit Screen' : fitMode === 'cover' ? 'Full Screen' : 'Fill Screen'}`}
                   aria-label="Toggle Screen Fit"
                 >
                   <Scan className="w-3.5 h-3.5 text-[#35A7FF]" />
-                  <span className="font-mono text-[11px] font-semibold whitespace-nowrap">
+                  <span className="font-mono text-[11px] font-semibold whitespace-nowrap hidden sm:inline">
                     {fitMode === 'contain' ? 'Fit Screen' : fitMode === 'cover' ? 'Full Screen' : 'Fill Screen'}
                   </span>
                 </button>
@@ -2262,6 +2640,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                         setIsEpisodesMenuOpen((prev) => !prev);
                         setIsQualityMenuOpen(false);
                         setIsSpeedMenuOpen(false);
+                        setIsLanguageMenuOpen(false);
+                        setIsCaptionMenuOpen(false);
                       }}
                       className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#0B1224]/90 hover:bg-[#16223D] active:bg-[#050A18] border border-white/[0.08] text-xs font-semibold text-[#F5F7FF] cursor-pointer transition-colors min-h-[36px]"
                       title="Seasons & Episodes"
@@ -2271,6 +2651,95 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                     </button>
                   </div>
                 )}
+
+                {/* Caption / Subtitles Button (Replaces lower PiP button) */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!hasCaptions) {
+                        showToast('No subtitles available for this title');
+                        return;
+                      }
+                      setIsCaptionMenuOpen((prev) => !prev);
+                      setIsQualityMenuOpen(false);
+                      setIsSpeedMenuOpen(false);
+                      setIsLanguageMenuOpen(false);
+                      setIsEpisodesMenuOpen(false);
+                    }}
+                    className={`h-10 px-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all press-feedback ${
+                      hasCaptions
+                        ? selectedCaption !== 'off'
+                          ? 'text-[#35A7FF] bg-[#176BFF]/25 border border-[#35A7FF]/50 shadow-[0_0_12px_rgba(23,107,255,0.3)]'
+                          : 'text-gray-300 hover:text-white active:bg-white/10'
+                        : 'text-gray-500 opacity-60 hover:opacity-100'
+                    }`}
+                    title={
+                      hasCaptions
+                        ? `${availableCaptionTracks.length} Caption Language${availableCaptionTracks.length > 1 ? 's' : ''} Available`
+                        : 'No captions available'
+                    }
+                    aria-label="Captions / Subtitles"
+                  >
+                    <Subtitles className={`w-5 h-5 ${hasCaptions ? 'text-[#35A7FF]' : 'text-gray-500'}`} />
+                    <span
+                      className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md ${
+                        hasCaptions
+                          ? selectedCaption !== 'off'
+                            ? 'bg-[#176BFF] text-white'
+                            : 'bg-[#176BFF]/20 text-[#35A7FF] border border-[#35A7FF]/30'
+                          : 'bg-white/5 text-gray-500'
+                      }`}
+                    >
+                      {hasCaptions ? `CC ${availableCaptionTracks.length}` : 'CC 0'}
+                    </span>
+                  </button>
+
+                  {/* Upward Subtitle / CC Menu in Lower Controls Bar */}
+                  {hasCaptions && isCaptionMenuOpen && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute bottom-full right-0 mb-3 w-56 max-h-64 overflow-y-auto bg-[#0B1224] border border-white/[0.12] rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1 backdrop-blur-xl animate-fade-in custom-scrollbar"
+                    >
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono flex items-center justify-between border-b border-white/[0.08] mb-1">
+                        <span>Subtitles / CC</span>
+                        <span className="text-[#35A7FF]">{availableCaptionTracks.length} Languages</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectCaption('off')}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                          selectedCaption === 'off'
+                            ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                            : 'text-gray-300 hover:bg-[#16223D]'
+                        }`}
+                      >
+                        <span>Off (No Captions)</span>
+                        {selectedCaption === 'off' && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
+                      </button>
+
+                      {availableCaptionTracks.map((track) => {
+                        const isSelected = selectedCaption === track.id || selectedCaption === track.language;
+                        return (
+                          <button
+                            key={track.id}
+                            type="button"
+                            onClick={() => handleSelectCaption(track.id, track.label)}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                                : 'text-gray-300 hover:bg-[#16223D]'
+                            }`}
+                          >
+                            <span className="truncate">{track.label || track.language}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
                 {/* Fullscreen Button */}
                 <button
@@ -2430,6 +2899,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Download Quality Selector Modal */}
+      {isDownloadModalOpen && currentMovie && streamInfo?.qualities && (
+        <DownloadQualityModal
+          isOpen={isDownloadModalOpen}
+          onClose={() => setIsDownloadModalOpen(false)}
+          movie={currentMovie}
+          season={isTv ? currentSeason : undefined}
+          episode={isTv ? currentEpisode : undefined}
+          qualities={streamInfo.qualities}
+          onSelectQuality={handleSelectPlayerDownloadQuality}
+        />
       )}
     </div>
   );

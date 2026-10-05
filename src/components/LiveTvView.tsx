@@ -23,6 +23,7 @@ import {
   Globe,
   SkipForward,
   SkipBack,
+  PictureInPicture,
 } from 'lucide-react';
 import {
   liveTvService,
@@ -44,65 +45,76 @@ const ChannelCard = memo(({ channel, isActive, onSelect }: ChannelCardProps) => 
   return (
     <div
       onClick={() => onSelect(channel)}
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 100px' }}
-      className={`group relative flex flex-col justify-between p-3 rounded-xl transition-all cursor-pointer select-none border ${
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
+      className={`group relative flex items-center gap-2.5 sm:gap-3 p-2.5 rounded-xl transition-all cursor-pointer select-none border ${
         isActive
           ? 'bg-[#176BFF]/15 border-[#35A7FF] shadow-[0_0_15px_rgba(23,107,255,0.25)]'
           : 'bg-[#0E172B] hover:bg-[#16223D] border-white/[0.08] hover:border-[#35A7FF]/40'
       }`}
     >
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="w-9 h-9 rounded-lg bg-[#050A18] border border-white/[0.08] p-1 flex items-center justify-center overflow-hidden shrink-0">
-          <img
-            src={channel.logo}
-            alt={channel.name}
-            width={36}
-            height={36}
-            loading="lazy"
-            decoding="async"
-            className="w-full h-full object-contain"
-            onError={(e) => {
-              const el = e.target as HTMLElement;
-              el.style.display = 'none';
-            }}
-          />
-        </div>
-        <div className="flex flex-col items-end">
+      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-[#050A18] border border-white/[0.08] p-1 flex items-center justify-center overflow-hidden shrink-0">
+        <img
+          src={channel.logo}
+          alt={channel.name}
+          width={36}
+          height={36}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-contain"
+          onError={(e) => {
+            const el = e.target as HTMLElement;
+            el.style.display = 'none';
+          }}
+        />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-1">
+          <h4 className={`text-xs sm:text-sm font-bold truncate leading-tight transition-colors ${
+            isActive ? 'text-[#35A7FF]' : 'text-[#F5F7FF] group-hover:text-[#35A7FF]'
+          }`}>
+            {channel.name}
+          </h4>
           {isActive ? (
-            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#176BFF] text-white font-black uppercase tracking-wider animate-pulse">
-              PLAYING
+            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#176BFF] text-white font-black uppercase tracking-wider animate-pulse shrink-0">
+              LIVE
             </span>
           ) : (
-            <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-[#8D9AB5]">
-              {channel.quality}
+            <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-[#8D9AB5] shrink-0">
+              {channel.quality || 'HD'}
             </span>
           )}
         </div>
       </div>
-
-      <div>
-        <h4 className={`text-xs font-bold truncate leading-tight transition-colors ${
-          isActive ? 'text-[#35A7FF]' : 'text-[#F5F7FF] group-hover:text-[#35A7FF]'
-        }`}>
-          {channel.name}
-        </h4>
-        <p className="text-[10px] text-[#8D9AB5] truncate mt-1">
-          {channel.currentProgram}
-        </p>
-      </div>
     </div>
   );
 }, (prev, next) => {
-  return prev.isActive === next.isActive && prev.channel.id === next.channel.id && prev.channel.currentProgram === next.channel.currentProgram;
+  return prev.isActive === next.isActive && prev.channel.id === next.channel.id;
 });
 
 ChannelCard.displayName = 'ChannelCard';
 
 export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
-  const allChannels: LiveChannel[] = useMemo(() => liveTvService.getChannels(), []);
+  const [allChannels, setAllChannels] = useState<LiveChannel[]>(() => liveTvService.getChannels());
   const [selectedCategory, setSelectedCategory] = useState<ChannelCategory>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeChannel, setActiveChannel] = useState<LiveChannel>(allChannels[0]);
+  const [activeChannel, setActiveChannel] = useState<LiveChannel>(() => allChannels[0] || liveTvService.getChannels()[0]);
+
+  // Subscribe to real-time remote channel updates
+  useEffect(() => {
+    const unsubscribe = liveTvService.subscribe((updated) => {
+      if (Array.isArray(updated) && updated.length > 0) {
+        setAllChannels(updated);
+        setActiveChannel((prev) => {
+          if (!prev) return updated[0];
+          const exists = updated.find((c) => c.id === prev.id);
+          return exists || updated[0];
+        });
+      }
+    });
+    liveTvService.syncRemoteChannels().catch(() => {});
+    return unsubscribe;
+  }, []);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -222,12 +234,31 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
     };
   }, [isFullscreen, exitLandscape]);
 
-  // Ensure clean teardown when navigating away or unmounting
+  // Picture in Picture helper
+  const triggerPip = useCallback(async () => {
+    try {
+      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.enterPipMode) {
+        const handled = (window as any).AndroidDevice.enterPipMode();
+        if (handled) return;
+      }
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (videoRef.current && document.pictureInPictureEnabled) {
+        await videoRef.current.requestPictureInPicture();
+      }
+    } catch {}
+  }, []);
+
+  // Ensure clean teardown and register global PiP triggers
   useEffect(() => {
+    (window as any).__cinevaultCanAutoPip = () => isPlaying && !error;
+    (window as any).__cinevaultTriggerPip = triggerPip;
     return () => {
+      delete (window as any).__cinevaultCanAutoPip;
+      delete (window as any).__cinevaultTriggerPip;
       exitLandscape();
     };
-  }, [exitLandscape]);
+  }, [isPlaying, error, triggerPip, exitLandscape]);
 
   // Filtered Channels based on Category and Search Query
   const filteredChannels = useMemo(() => {
@@ -532,9 +563,6 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
               <h1 className="text-xl sm:text-2xl font-black tracking-tight font-headline text-[#F5F7FF]">
                 Live TV
               </h1>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 font-mono">
-                24x7 Stream
-              </span>
             </div>
 
             {/* Quick Search Input */}
@@ -716,13 +744,22 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                         LIVE
                       </span>
                     </div>
-                    <p className="text-[10px] text-[#8D9AB5] truncate max-w-[180px] sm:max-w-xs mt-0.5">
-                      {activeChannel.currentProgram}
-                    </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      triggerPip();
+                    }}
+                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 active:bg-white/30 text-white flex items-center justify-center cursor-pointer transition-colors"
+                    title="Picture-in-Picture"
+                    aria-label="Picture-in-Picture"
+                  >
+                    <PictureInPicture className="w-3.5 h-3.5 text-[#35A7FF]" />
+                  </button>
                   <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-white/10 text-white/90 border border-white/10">
                     {activeChannel.quality || 'HD'}
                   </span>
@@ -750,7 +787,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                 )}
               </div>
 
-              {/* BOTTOM BAR: Play, Mute, Channel Switchers & Fullscreen */}
+              {/* BOTTOM BAR: Play, Mute, Channel Switchers, PiP & Fullscreen */}
               <div
                 className="flex items-center justify-between pointer-events-auto"
                 style={{
@@ -785,7 +822,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                   </button>
                 </div>
 
-                {/* Right: Prev Channel / Next Channel + Fullscreen */}
+                {/* Right: Prev Channel / Next Channel + PiP + Fullscreen */}
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <button
                     type="button"
@@ -817,6 +854,19 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      triggerPip();
+                    }}
+                    className="w-9 h-9 rounded-lg text-white hover:text-[#35A7FF] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
+                    title="Picture in Picture"
+                    aria-label="Picture in Picture"
+                  >
+                    <PictureInPicture className="w-4 h-4 text-[#35A7FF]" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       toggleFullscreen();
                     }}
                     className="w-9 h-9 rounded-lg text-white hover:text-[#35A7FF] active:bg-white/10 flex items-center justify-center cursor-pointer transition-colors"
@@ -832,7 +882,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
           {/* Active Channel Info Strip (Portrait only) */}
           {!isFullscreen && (
             <div className="bg-[#0E172B] border border-white/[0.08] rounded-xl p-3 flex items-center justify-between shadow-[0_4px_16px_rgba(5,10,24,0.6)]">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-[#050A18] border border-white/[0.08] p-1 flex items-center justify-center overflow-hidden shrink-0">
                   <img
                     src={activeChannel.logo}
@@ -840,26 +890,29 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                     className="w-full h-full object-contain"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-[#F5F7FF]">{activeChannel.name}</h3>
-                    <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">
+                    <h3 className="text-sm font-bold text-[#F5F7FF] truncate">{activeChannel.name}</h3>
+                    <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold shrink-0">
                       LIVE
                     </span>
-                    {activeChannel.badge && (
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#176BFF]/15 text-[#35A7FF] font-bold border border-[#35A7FF]/30">
-                        {activeChannel.badge}
-                      </span>
-                    )}
                   </div>
-                  <p className="text-xs text-[#8D9AB5] mt-0.5 truncate max-w-xs sm:max-w-md">
-                    {activeChannel.currentProgram}
-                  </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-xs font-mono text-[#8D9AB5]">
-                <span>{activeChannel.language}</span>
+              <div className="flex items-center gap-2 text-xs font-mono text-[#8D9AB5] shrink-0">
+                <button
+                  type="button"
+                  onClick={triggerPip}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-xs font-medium text-[#35A7FF] border border-white/[0.08] transition-colors cursor-pointer"
+                  title="Picture-in-Picture"
+                >
+                  <PictureInPicture className="w-3.5 h-3.5" />
+                  <span>PiP</span>
+                </button>
+                <span className="px-2 py-1 rounded bg-white/[0.06] border border-white/[0.08] text-gray-300">
+                  {activeChannel.quality || 'HD'}
+                </span>
               </div>
             </div>
           )}

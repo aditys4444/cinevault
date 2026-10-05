@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import type { Movie } from '../types/movie';
-import { Film, Tv } from 'lucide-react';
+import { Film } from 'lucide-react';
 
 interface MovieCardProps {
   movie: Movie;
@@ -66,24 +66,6 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
             imageLoaded ? 'opacity-100' : 'opacity-0'
           }`}
         />
-
-        {/* Rating or Coming Soon */}
-        {movie.is_coming_soon ? (
-          <div className="absolute top-2 left-2 flex items-center px-1.5 py-0.5 rounded-md bg-[#176BFF] text-[9px] font-bold text-white shadow-sm uppercase tracking-wider">
-            Soon
-          </div>
-        ) : movie.rating > 0 ? (
-          <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#060911]/85 backdrop-blur-sm border border-[#1E293B]/60 text-[10px] font-bold text-[#F5F7FF] shadow-sm">
-            <span className="text-amber-400 text-[9px]">★</span>
-            <span>{movie.rating.toFixed(1)}</span>
-          </div>
-        ) : null}
-
-        {/* Media Type & Quality Badge */}
-        <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#060911]/90 text-[10px] font-semibold text-[#8D9AB5] border border-white/[0.08] shadow-sm backdrop-blur-sm">
-          {isTv ? <Tv className="w-2.5 h-2.5 text-[#35A7FF]" /> : <Film className="w-2.5 h-2.5 text-[#176BFF]" />}
-          <span className="font-mono uppercase text-[9px]">{isTv ? 'SERIES' : '4K HDR'}</span>
-        </div>
 
         {/* Subtle Dark Overlay on hover */}
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />

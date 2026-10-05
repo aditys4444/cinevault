@@ -20,6 +20,18 @@ for (const t of targets) {
   console.log('Updated:', t);
 }
 
+// Sync remote catalog API files to dist
+const apiFiles = ['channels.json', 'adult.json', 'custom-content.json'];
+for (const file of apiFiles) {
+  const src = path.join(webDir, 'api', file);
+  const dest = path.join(webDir, 'dist/api', file);
+  if (fs.existsSync(src)) {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    console.log(`Synced content: api/${file} -> dist/api/${file}`);
+  }
+}
+
 // Update index.html and dist/index.html
 function updateHtml(filePath) {
   if (!fs.existsSync(filePath)) return;

@@ -55,9 +55,9 @@ public class MainActivity extends BridgeActivity {
     private long lastBackPressTime = 0;
     private boolean isImmersiveLandscape = false;
 
-    private static String cachedToken = "";
-    private static String cachedXUser = "";
-    private static long tokenExpiresAt = 0;
+    private static String cachedToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjc0MDk3NDg3NjU0NTg3MTg4NDgsImF0cCI6MywiZXh0IjoiMTc5MDY5MTgwOCIsImV4cCI6MTc5ODQ2NzgwOCwiaWF0IjoxNzkwNjkxNTA4fQ.wYD3dZn6Luu6rVpEbGJ6GyFctbFvjrfp9m25BUcODao";
+    private static String cachedXUser = "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjc0MDk3NDg3NjU0NTg3MTg4NDgsImF0cCI6MywiZXh0IjoiMTc5MDY5MTgwOCIsImV4cCI6MTc5ODQ2NzgwOCwiaWF0IjoxNzkwNjkxNTA4fQ.wYD3dZn6Luu6rVpEbGJ6GyFctbFvjrfp9m25BUcODao\",\"userId\":\"7409748765458718848\",\"userType\":0,\"appType\":3}";
+    private static long tokenExpiresAt = System.currentTimeMillis() + 86400000L * 30;
     private static final Map<String, String> REDIRECT_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Map<String, String> STREAM_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Map<String, Long> STREAM_CACHE_TS = new java.util.concurrent.ConcurrentHashMap<>();
@@ -109,11 +109,9 @@ public class MainActivity extends BridgeActivity {
 
     public static String getProxyVideoUrl(String rawUrl) {
         if (rawUrl == null || rawUrl.isEmpty()) return "";
-        if (rawUrl.contains("127.0.0.1") || rawUrl.contains("localhost")) return rawUrl;
-        ensureLocalProxyServer();
-        if (localProxyPort <= 0) return rawUrl;
+        if (rawUrl.contains("https://localhost/local_media") || rawUrl.contains("127.0.0.1/local_media")) return rawUrl;
         try {
-            if (rawUrl.startsWith("file://") || rawUrl.startsWith("/") || rawUrl.contains("local_media")) {
+            if (rawUrl.startsWith("file://") || rawUrl.startsWith("/") || rawUrl.contains("local_media") || rawUrl.startsWith("content://")) {
                 String path = rawUrl;
                 if (rawUrl.contains("path=")) {
                     Uri u = Uri.parse(rawUrl);
@@ -122,8 +120,11 @@ public class MainActivity extends BridgeActivity {
                 } else if (rawUrl.startsWith("file://")) {
                     path = rawUrl.substring(7);
                 }
-                return "http://127.0.0.1:" + localProxyPort + "/local_media?path=" + URLEncoder.encode(path, "UTF-8");
+                return "https://localhost/local_media?path=" + URLEncoder.encode(path, "UTF-8");
             }
+            if (rawUrl.contains("127.0.0.1") || rawUrl.contains("localhost")) return rawUrl;
+            ensureLocalProxyServer();
+            if (localProxyPort <= 0) return rawUrl;
             return "http://127.0.0.1:" + localProxyPort + "/stream?url=" + URLEncoder.encode(rawUrl, "UTF-8");
         } catch (Exception e) {
             return rawUrl;
@@ -502,45 +503,52 @@ public class MainActivity extends BridgeActivity {
         if (!forceRefresh && !cachedToken.isEmpty() && System.currentTimeMillis() < tokenExpiresAt) {
             return;
         }
-        try {
-            URL url = new URL("https://mzfi.me/wefeed-h5api-bff/subject/trending?page=1&perPage=1");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(6000);
-            conn.setReadTimeout(6000);
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            conn.setRequestProperty("Origin", "https://mzfi.me");
-            conn.setRequestProperty("Referer", "https://mzfi.me/");
+        String[] authUrls = new String[] {
+            "https://mzfi.me/wefeed-h5api-bff/subject/trending?page=1&perPage=1",
+            "https://h5-api.aoneroom.com/wefeed-h5api-bff/subject/trending?page=1&perPage=1"
+        };
+        for (String authUrl : authUrls) {
+            try {
+                URL url = new URL(authUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(2000);
+                conn.setReadTimeout(2000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                conn.setRequestProperty("Origin", "https://mzfi.me");
+                conn.setRequestProperty("Referer", "https://mzfi.me/");
 
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                String xUser = conn.getHeaderField("x-user");
-                String token = conn.getHeaderField("token");
-                String setCookie = conn.getHeaderField("Set-Cookie");
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    String xUser = conn.getHeaderField("x-user");
+                    String token = conn.getHeaderField("token");
+                    String setCookie = conn.getHeaderField("Set-Cookie");
 
-                if (xUser != null && !xUser.isEmpty()) {
-                    cachedXUser = xUser;
-                    try {
-                        org.json.JSONObject u = new org.json.JSONObject(xUser);
-                        if (u.has("token")) {
-                            token = u.getString("token");
+                    if (xUser != null && !xUser.isEmpty()) {
+                        cachedXUser = xUser;
+                        try {
+                            org.json.JSONObject u = new org.json.JSONObject(xUser);
+                            if (u.has("token")) {
+                                token = u.getString("token");
+                            }
+                        } catch (Exception ignored) {}
+                    }
+
+                    if ((token == null || token.isEmpty()) && setCookie != null) {
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("token=([^;]+)").matcher(setCookie);
+                        if (m.find()) {
+                            token = m.group(1);
                         }
-                    } catch (Exception ignored) {}
-                }
+                    }
 
-                if ((token == null || token.isEmpty()) && setCookie != null) {
-                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("token=([^;]+)").matcher(setCookie);
-                    if (m.find()) {
-                        token = m.group(1);
+                    if (token != null && !token.isEmpty()) {
+                        cachedToken = token;
+                        tokenExpiresAt = System.currentTimeMillis() + 86400000L * 30;
+                        break;
                     }
                 }
-
-                if (token != null && !token.isEmpty()) {
-                    cachedToken = token;
-                    tokenExpiresAt = System.currentTimeMillis() + 3600000;
-                }
-            }
-        } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+        }
     }
 
     // Comprehensive list of ad, tracker, popunder, and betting network domains to intercept & block
@@ -663,27 +671,51 @@ public class MainActivity extends BridgeActivity {
                 if (uri == null) return null;
                 String path = uri.getQueryParameter("path");
                 if (path == null || path.isEmpty()) return null;
-                File file = new File(path);
-                if (!file.exists() || !file.canRead()) {
-                    String fileName = new File(path).getName();
-                    if (appContext != null) {
-                        File extMovies = appContext.getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-                        if (extMovies != null) {
-                            File alt1 = new File(extMovies, fileName);
-                            if (alt1.exists() && alt1.canRead()) file = alt1;
+
+                File file = null;
+                long totalLength = 0;
+                android.os.ParcelFileDescriptor pfd = null;
+
+                if (path.startsWith("content://") && appContext != null) {
+                    try {
+                        pfd = appContext.getContentResolver().openFileDescriptor(Uri.parse(path), "r");
+                        if (pfd != null) {
+                            totalLength = pfd.getStatSize();
                         }
-                        if (!file.exists() || !file.canRead()) {
-                            File extDl = appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-                            if (extDl != null) {
-                                File alt2 = new File(extDl, fileName);
-                                if (alt2.exists() && alt2.canRead()) file = alt2;
-                            }
-                        }
-                    }
-                    if (!file.exists() || !file.canRead()) return null;
+                    } catch (Exception ignored) {}
                 }
 
-                long totalLength = file.length();
+                if (pfd == null) {
+                    file = new File(path);
+                    if (!file.exists() || !file.canRead()) {
+                        String fileName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+                        if (appContext != null) {
+                            File extDl = appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                            if (extDl != null) {
+                                File alt1 = new File(extDl, fileName);
+                                if (alt1.exists() && alt1.canRead()) file = alt1;
+                            }
+                            if (!file.exists() || !file.canRead()) {
+                                File extMovies = appContext.getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                                if (extMovies != null) {
+                                    File alt2 = new File(extMovies, fileName);
+                                    if (alt2.exists() && alt2.canRead()) file = alt2;
+                                }
+                            }
+                        }
+                        if (!file.exists() || !file.canRead()) {
+                            File f1 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "CineVault/" + fileName);
+                            File f2 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName);
+                            File f3 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "CineVault/" + fileName);
+                            if (f1.exists() && f1.canRead()) file = f1;
+                            else if (f2.exists() && f2.canRead()) file = f2;
+                            else if (f3.exists() && f3.canRead()) file = f3;
+                        }
+                    }
+                    if (file == null || !file.exists() || !file.canRead()) return null;
+                    totalLength = file.length();
+                }
+
                 long start = 0;
                 long end = totalLength - 1;
 
@@ -714,32 +746,62 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 long contentLength = end - start + 1;
-                final RandomAccessFile raf = new RandomAccessFile(file, "r");
-                raf.seek(start);
-
                 final long bytesToRead = contentLength;
-                InputStream stream = new InputStream() {
-                    private long readCount = 0;
-                    @Override
-                    public int read() throws IOException {
-                        if (readCount >= bytesToRead) return -1;
-                        int b = raf.read();
-                        if (b != -1) readCount++;
-                        return b;
-                    }
-                    @Override
-                    public int read(byte[] b, int off, int len) throws IOException {
-                        if (readCount >= bytesToRead) return -1;
-                        int max = (int) Math.min(len, bytesToRead - readCount);
-                        int r = raf.read(b, off, max);
-                        if (r > 0) readCount += r;
-                        return r;
-                    }
-                    @Override
-                    public void close() throws IOException {
-                        try { raf.close(); } catch (Exception ignored) {}
-                    }
-                };
+                InputStream stream;
+
+                if (file != null) {
+                    final RandomAccessFile raf = new RandomAccessFile(file, "r");
+                    raf.seek(start);
+                    stream = new InputStream() {
+                        private long readCount = 0;
+                        @Override
+                        public int read() throws IOException {
+                            if (readCount >= bytesToRead) return -1;
+                            int b = raf.read();
+                            if (b != -1) readCount++;
+                            return b;
+                        }
+                        @Override
+                        public int read(byte[] b, int off, int len) throws IOException {
+                            if (readCount >= bytesToRead) return -1;
+                            int max = (int) Math.min(len, bytesToRead - readCount);
+                            int r = raf.read(b, off, max);
+                            if (r > 0) readCount += r;
+                            return r;
+                        }
+                        @Override
+                        public void close() throws IOException {
+                            try { raf.close(); } catch (Exception ignored) {}
+                        }
+                    };
+                } else {
+                    final android.os.ParcelFileDescriptor finalPfd = pfd;
+                    final FileInputStream fis = new FileInputStream(finalPfd.getFileDescriptor());
+                    fis.getChannel().position(start);
+                    stream = new InputStream() {
+                        private long readCount = 0;
+                        @Override
+                        public int read() throws IOException {
+                            if (readCount >= bytesToRead) return -1;
+                            int b = fis.read();
+                            if (b != -1) readCount++;
+                            return b;
+                        }
+                        @Override
+                        public int read(byte[] b, int off, int len) throws IOException {
+                            if (readCount >= bytesToRead) return -1;
+                            int max = (int) Math.min(len, bytesToRead - readCount);
+                            int r = fis.read(b, off, max);
+                            if (r > 0) readCount += r;
+                            return r;
+                        }
+                        @Override
+                        public void close() throws IOException {
+                            try { fis.close(); } catch (Exception ignored) {}
+                            try { finalPfd.close(); } catch (Exception ignored) {}
+                        }
+                    };
+                }
 
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Content-Type", "video/mp4");
@@ -849,7 +911,20 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-                if (isMovieBoxCdn || isMzfi) {
+                if (urlStr != null && urlStr.contains("subject/play")) {
+                    Uri pUri = Uri.parse(urlStr);
+                    String pSubId = pUri.getQueryParameter("subjectId");
+                    String pPath = pUri.getQueryParameter("detailPath");
+                    String pSe = pUri.getQueryParameter("se");
+                    String pEp = pUri.getQueryParameter("ep");
+                    String ref = "https://mzfi.me/spa/videoPlayPage/movies/" + (pPath != null ? pPath : pSubId) + "?id=" + (pSubId != null ? pSubId : "") + "&type=/movie/detail&detailSe=" + (pSe != null ? pSe : "0") + "&detailEp=" + (pEp != null ? pEp : "0") + "&lang=en";
+                    conn.setRequestProperty("Referer", ref);
+                    conn.setRequestProperty("Origin", "https://mzfi.me");
+                    if (cachedToken != null && !cachedToken.isEmpty()) {
+                        conn.setRequestProperty("token", cachedToken);
+                        conn.setRequestProperty("Cookie", "token=" + cachedToken);
+                    }
+                } else if (isMovieBoxCdn || isMzfi) {
                     conn.setRequestProperty("Referer", "https://mzfi.me/");
                     conn.setRequestProperty("Origin", "https://mzfi.me");
                 } else if (isMovieBoxApi) {
@@ -882,7 +957,20 @@ public class MainActivity extends BridgeActivity {
                         conn.setRequestProperty(fEntry.getKey(), fEntry.getValue());
                     }
                     conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-                    if (isMovieBoxCdn || isMzfi) {
+                    if (urlStr != null && urlStr.contains("subject/play")) {
+                        Uri pUri = Uri.parse(urlStr);
+                        String pSubId = pUri.getQueryParameter("subjectId");
+                        String pPath = pUri.getQueryParameter("detailPath");
+                        String pSe = pUri.getQueryParameter("se");
+                        String pEp = pUri.getQueryParameter("ep");
+                        String ref = "https://mzfi.me/spa/videoPlayPage/movies/" + (pPath != null ? pPath : pSubId) + "?id=" + (pSubId != null ? pSubId : "") + "&type=/movie/detail&detailSe=" + (pSe != null ? pSe : "0") + "&detailEp=" + (pEp != null ? pEp : "0") + "&lang=en";
+                        conn.setRequestProperty("Referer", ref);
+                        conn.setRequestProperty("Origin", "https://mzfi.me");
+                        if (cachedToken != null && !cachedToken.isEmpty()) {
+                            conn.setRequestProperty("token", cachedToken);
+                            conn.setRequestProperty("Cookie", "token=" + cachedToken);
+                        }
+                    } else if (isMovieBoxCdn || isMzfi) {
                         conn.setRequestProperty("Referer", "https://mzfi.me/");
                         conn.setRequestProperty("Origin", "https://mzfi.me");
                     } else if (isMovieBoxApi) {
@@ -916,7 +1004,20 @@ public class MainActivity extends BridgeActivity {
                         conn.setRequestProperty(fEntry.getKey(), fEntry.getValue());
                     }
                     conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-                    if (isMovieBoxCdn || isMzfi) {
+                    if (url != null && url.toString().contains("subject/play")) {
+                        Uri pUri = Uri.parse(urlStr);
+                        String pSubId = pUri.getQueryParameter("subjectId");
+                        String pPath = pUri.getQueryParameter("detailPath");
+                        String pSe = pUri.getQueryParameter("se");
+                        String pEp = pUri.getQueryParameter("ep");
+                        String ref = "https://mzfi.me/spa/videoPlayPage/movies/" + (pPath != null ? pPath : pSubId) + "?id=" + (pSubId != null ? pSubId : "") + "&type=/movie/detail&detailSe=" + (pSe != null ? pSe : "0") + "&detailEp=" + (pEp != null ? pEp : "0") + "&lang=en";
+                        conn.setRequestProperty("Referer", ref);
+                        conn.setRequestProperty("Origin", "https://mzfi.me");
+                        if (cachedToken != null && !cachedToken.isEmpty()) {
+                            conn.setRequestProperty("token", cachedToken);
+                            conn.setRequestProperty("Cookie", "token=" + cachedToken);
+                        }
+                    } else if (isMovieBoxCdn || isMzfi) {
                         conn.setRequestProperty("Referer", "https://mzfi.me/");
                         conn.setRequestProperty("Origin", "https://mzfi.me");
                     } else if (isMovieBoxApi) {
@@ -1494,27 +1595,27 @@ public class MainActivity extends BridgeActivity {
                             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                             boolean isPost = postBody != null && !postBody.isEmpty();
                             conn.setRequestMethod(isPost ? "POST" : "GET");
-                            conn.setConnectTimeout(10000);
-                            conn.setReadTimeout(15000);
+                            conn.setConnectTimeout(3500);
+                            conn.setReadTimeout(5000);
                             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
                             conn.setRequestProperty("Accept", "application/json, text/plain, */*");
                             conn.setRequestProperty("Content-Type", "application/json");
 
                             ensureMovieBoxToken();
+                            boolean isPlayReq = urlStr != null && urlStr.contains("subject/play");
                             boolean isMzfi = urlStr != null && urlStr.contains("mzfi.me");
-                            if (isMzfi) {
+                            if (isPlayReq) {
+                                Uri playUri = Uri.parse(urlStr);
+                                String pSubId = playUri.getQueryParameter("subjectId");
+                                String pPath = playUri.getQueryParameter("detailPath");
+                                String pSe = playUri.getQueryParameter("se");
+                                String pEp = playUri.getQueryParameter("ep");
+                                String ref = "https://mzfi.me/spa/videoPlayPage/movies/" + (pPath != null ? pPath : pSubId) + "?id=" + (pSubId != null ? pSubId : "") + "&type=/movie/detail&detailSe=" + (pSe != null ? pSe : "0") + "&detailEp=" + (pEp != null ? pEp : "0") + "&lang=en";
                                 conn.setRequestProperty("Origin", "https://mzfi.me");
-                                if (urlStr.contains("subject/play")) {
-                                    Uri playUri = Uri.parse(urlStr);
-                                    String pSubId = playUri.getQueryParameter("subjectId");
-                                    String pPath = playUri.getQueryParameter("detailPath");
-                                    String pSe = playUri.getQueryParameter("se");
-                                    String pEp = playUri.getQueryParameter("ep");
-                                    String ref = "https://mzfi.me/spa/videoPlayPage/movies/" + (pPath != null ? pPath : pSubId) + "?id=" + (pSubId != null ? pSubId : "") + "&type=/movie/detail&detailSe=" + (pSe != null ? pSe : "0") + "&detailEp=" + (pEp != null ? pEp : "0") + "&lang=en";
-                                    conn.setRequestProperty("Referer", ref);
-                                } else {
-                                    conn.setRequestProperty("Referer", "https://mzfi.me/");
-                                }
+                                conn.setRequestProperty("Referer", ref);
+                            } else if (isMzfi) {
+                                conn.setRequestProperty("Origin", "https://mzfi.me");
+                                conn.setRequestProperty("Referer", "https://mzfi.me/");
                             } else {
                                 conn.setRequestProperty("Origin", "https://h5.aoneroom.com");
                                 conn.setRequestProperty("Referer", "https://h5.aoneroom.com/");
@@ -1522,6 +1623,7 @@ public class MainActivity extends BridgeActivity {
 
                             if (cachedToken != null && !cachedToken.isEmpty()) {
                                 conn.setRequestProperty("token", cachedToken);
+                                conn.setRequestProperty("Cookie", "token=" + cachedToken);
                             }
                             if (cachedXUser != null && !cachedXUser.isEmpty()) {
                                 conn.setRequestProperty("x-user", cachedXUser);
@@ -1633,41 +1735,102 @@ public class MainActivity extends BridgeActivity {
 
                             String resolvedPath = (detailPath != null && !detailPath.trim().isEmpty()) ? detailPath.trim() : subjectId;
 
-                            // Fast resolve slug from mzfi.me if numeric or missing
+                            // Fast resolve slug from both mzfi.me and h5-api.aoneroom.com if numeric
                             if (resolvedPath != null && resolvedPath.matches("\\d+")) {
+                                String[] dDomains = new String[] { "https://mzfi.me", "https://h5-api.aoneroom.com" };
+                                for (String dDom : dDomains) {
+                                    try {
+                                        URL dUrl = new URL(dDom + "/wefeed-h5api-bff/detail?subjectId=" + subjectId);
+                                        HttpURLConnection dConn = (HttpURLConnection) dUrl.openConnection();
+                                        dConn.setRequestMethod("GET");
+                                        dConn.setConnectTimeout(2500);
+                                        dConn.setReadTimeout(2500);
+                                        dConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                                        dConn.setRequestProperty("Origin", "https://mzfi.me");
+                                        dConn.setRequestProperty("Referer", "https://mzfi.me/");
+                                        if (cachedToken != null && !cachedToken.isEmpty()) {
+                                            dConn.setRequestProperty("token", cachedToken);
+                                            dConn.setRequestProperty("Cookie", "token=" + cachedToken);
+                                        }
+                                        if (cachedXUser != null && !cachedXUser.isEmpty()) {
+                                            dConn.setRequestProperty("x-user", cachedXUser);
+                                        }
+                                        if (dConn.getResponseCode() == 200) {
+                                            InputStream dIn = dConn.getInputStream();
+                                            String dEnc = dConn.getHeaderField("Content-Encoding");
+                                            if (dEnc != null && dEnc.toLowerCase().contains("gzip")) {
+                                                dIn = new java.util.zip.GZIPInputStream(dIn);
+                                            }
+                                            BufferedReader dReader = new BufferedReader(new InputStreamReader(dIn, "utf-8"));
+                                            StringBuilder dSb = new StringBuilder();
+                                            String dLine;
+                                            while ((dLine = dReader.readLine()) != null) dSb.append(dLine);
+                                            dReader.close();
+                                            org.json.JSONObject dRes = new org.json.JSONObject(dSb.toString());
+                                            if (dRes.has("data") && dRes.getJSONObject("data").has("subject")) {
+                                                String slug = dRes.getJSONObject("data").getJSONObject("subject").optString("detailPath", "");
+                                                if (slug != null && !slug.isEmpty() && !slug.matches("\\d+")) {
+                                                    resolvedPath = slug;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+
+                            // Secondary slug resolution via search API if still numeric and title is present
+                            if (resolvedPath != null && resolvedPath.matches("\\d+") && title != null && !title.trim().isEmpty()) {
                                 try {
-                                    URL dUrl = new URL("https://mzfi.me/wefeed-h5api-bff/detail?subjectId=" + subjectId);
-                                    HttpURLConnection dConn = (HttpURLConnection) dUrl.openConnection();
-                                    dConn.setRequestMethod("GET");
-                                    dConn.setConnectTimeout(2000);
-                                    dConn.setReadTimeout(2000);
-                                    dConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-                                    dConn.setRequestProperty("Origin", "https://mzfi.me");
-                                    dConn.setRequestProperty("Referer", "https://mzfi.me/");
-                                    if (cachedToken != null && !cachedToken.isEmpty()) {
-                                        dConn.setRequestProperty("token", cachedToken);
-                                    }
-                                    if (cachedXUser != null && !cachedXUser.isEmpty()) {
-                                        dConn.setRequestProperty("x-user", cachedXUser);
-                                    }
-                                    if (dConn.getResponseCode() == 200) {
-                                        InputStream dIn = dConn.getInputStream();
-                                        String dEnc = dConn.getHeaderField("Content-Encoding");
-                                        if (dEnc != null && dEnc.toLowerCase().contains("gzip")) {
-                                            dIn = new java.util.zip.GZIPInputStream(dIn);
+                                    String cleanTitle = title.replaceAll("\\[.*?\\]|\\(.*?\\)", "").trim();
+                                    if (!cleanTitle.isEmpty()) {
+                                        URL sUrl = new URL("https://h5-api.aoneroom.com/wefeed-h5api-bff/subject/search");
+                                        HttpURLConnection sConn = (HttpURLConnection) sUrl.openConnection();
+                                        sConn.setRequestMethod("POST");
+                                        sConn.setConnectTimeout(2500);
+                                        sConn.setReadTimeout(2500);
+                                        sConn.setRequestProperty("Content-Type", "application/json");
+                                        sConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                                        sConn.setRequestProperty("Origin", "https://h5.aoneroom.com");
+                                        sConn.setRequestProperty("Referer", "https://h5.aoneroom.com/");
+                                        sConn.setDoOutput(true);
+                                        org.json.JSONObject payload = new org.json.JSONObject();
+                                        payload.put("keyword", cleanTitle);
+                                        payload.put("page", 1);
+                                        payload.put("perPage", 4);
+                                        payload.put("subjectType", isTv ? 2 : 1);
+                                        try (OutputStream os = sConn.getOutputStream()) {
+                                            os.write(payload.toString().getBytes("utf-8"));
                                         }
-                                        BufferedReader dReader = new BufferedReader(new InputStreamReader(dIn, "utf-8"));
-                                        StringBuilder dSb = new StringBuilder();
-                                        String dLine;
-                                        while ((dLine = dReader.readLine()) != null) {
-                                            dSb.append(dLine);
-                                        }
-                                        dReader.close();
-                                        org.json.JSONObject dRes = new org.json.JSONObject(dSb.toString());
-                                        if (dRes.has("data") && dRes.getJSONObject("data").has("subject")) {
-                                            String slug = dRes.getJSONObject("data").getJSONObject("subject").optString("detailPath", "");
-                                            if (slug != null && !slug.isEmpty() && !slug.matches("\\d+")) {
-                                                resolvedPath = slug;
+                                        if (sConn.getResponseCode() == 200) {
+                                            InputStream sis = sConn.getInputStream();
+                                            String senc = sConn.getHeaderField("Content-Encoding");
+                                            if (senc != null && senc.toLowerCase().contains("gzip")) {
+                                                sis = new java.util.zip.GZIPInputStream(sis);
+                                            }
+                                            BufferedReader sreader = new BufferedReader(new InputStreamReader(sis, "utf-8"));
+                                            StringBuilder ssb = new StringBuilder();
+                                            String sline;
+                                            while ((sline = sreader.readLine()) != null) ssb.append(sline);
+                                            sreader.close();
+                                            org.json.JSONObject sres = new org.json.JSONObject(ssb.toString());
+                                            org.json.JSONArray sitems = sres.optJSONObject("data") != null ? sres.getJSONObject("data").optJSONArray("items") : null;
+                                            if (sitems != null && sitems.length() > 0) {
+                                                for (int k = 0; k < sitems.length(); k++) {
+                                                    org.json.JSONObject itm = sitems.getJSONObject(k);
+                                                    String itmId = itm.optString("subjectId", itm.optString("id", ""));
+                                                    String itmPath = itm.optString("detailPath", "");
+                                                    if (itmId.equals(subjectId) && !itmPath.isEmpty() && !itmPath.matches("\\d+")) {
+                                                        resolvedPath = itmPath;
+                                                        break;
+                                                    }
+                                                }
+                                                if (resolvedPath.matches("\\d+")) {
+                                                    String firstSlug = sitems.getJSONObject(0).optString("detailPath", "");
+                                                    if (!firstSlug.isEmpty() && !firstSlug.matches("\\d+")) {
+                                                        resolvedPath = firstSlug;
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1682,84 +1845,92 @@ public class MainActivity extends BridgeActivity {
                                 : new int[][] { { 0, 0 }, { 1, 1 } };
 
                             String[] pathCandidates;
-                            if (subjectId != null && !subjectId.trim().isEmpty() && !subjectId.equals(resolvedPath)) {
+                            if (!resolvedPath.matches("\\d+") && !resolvedPath.equals(subjectId)) {
                                 pathCandidates = new String[] { resolvedPath, subjectId.trim() };
                             } else {
                                 pathCandidates = new String[] { resolvedPath };
                             }
+
+                            String[] playDomains = new String[] { "https://mzfi.me", "https://h5-api.aoneroom.com" };
 
                             for (int retryRound = 0; retryRound < 2; retryRound++) {
                                 for (String currentPath : pathCandidates) {
                                     for (int[] att : attempts) {
                                         int se = att[0];
                                         int ep = att[1];
-                                        String playUrl = "https://mzfi.me/wefeed-h5api-bff/subject/play?subjectId=" + subjectId + "&se=" + se + "&ep=" + ep + "&detailPath=" + currentPath + "&streamSignType=0";
                                         String currentWebUrl = "https://mzfi.me/spa/videoPlayPage/movies/" + currentPath + "?id=" + subjectId + "&type=/movie/detail&detailSe=" + se + "&detailEp=" + ep + "&lang=en";
 
-                                        URL url = new URL(playUrl);
-                                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                                        conn.setRequestMethod("GET");
-                                        conn.setConnectTimeout(6000);
-                                        conn.setReadTimeout(8000);
-                                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-                                        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-                                        conn.setRequestProperty("Origin", "https://mzfi.me");
-                                        conn.setRequestProperty("Referer", currentWebUrl);
-                                        if (cachedToken != null && !cachedToken.isEmpty()) {
-                                            conn.setRequestProperty("token", cachedToken);
-                                        }
-                                        if (cachedXUser != null && !cachedXUser.isEmpty()) {
-                                            conn.setRequestProperty("x-user", cachedXUser);
-                                        }
+                                        for (String playDomain : playDomains) {
+                                            try {
+                                                String playUrl = playDomain + "/wefeed-h5api-bff/subject/play?subjectId=" + subjectId + "&se=" + se + "&ep=" + ep + "&detailPath=" + currentPath + "&streamSignType=0";
 
-                                        if (conn.getResponseCode() == 200) {
-                                            InputStream inStream = conn.getInputStream();
-                                            String enc = conn.getHeaderField("Content-Encoding");
-                                            if (enc != null && enc.toLowerCase().contains("gzip")) {
-                                                inStream = new java.util.zip.GZIPInputStream(inStream);
-                                            }
-                                            BufferedReader reader = new BufferedReader(new InputStreamReader(inStream, "utf-8"));
-                                            StringBuilder sb = new StringBuilder();
-                                            String line;
-                                            while ((line = reader.readLine()) != null) {
-                                                sb.append(line);
-                                            }
-                                            reader.close();
+                                                URL url = new URL(playUrl);
+                                                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                                                conn.setRequestMethod("GET");
+                                                conn.setConnectTimeout(3500);
+                                                conn.setReadTimeout(5000);
+                                                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                                                conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+                                                conn.setRequestProperty("Origin", "https://mzfi.me");
+                                                conn.setRequestProperty("Referer", currentWebUrl);
+                                                if (cachedToken != null && !cachedToken.isEmpty()) {
+                                                    conn.setRequestProperty("token", cachedToken);
+                                                    conn.setRequestProperty("Cookie", "token=" + cachedToken);
+                                                }
+                                                if (cachedXUser != null && !cachedXUser.isEmpty()) {
+                                                    conn.setRequestProperty("x-user", cachedXUser);
+                                                }
 
-                                            org.json.JSONObject resObj = new org.json.JSONObject(sb.toString());
-                                            if (resObj.optInt("code", -1) == 0 && resObj.has("data")) {
-                                                org.json.JSONObject dataObj = resObj.getJSONObject("data");
-                                                org.json.JSONArray streamsArr = dataObj.optJSONArray("streams");
-                                                if (streamsArr != null && streamsArr.length() > 0) {
-                                                    org.json.JSONObject result = new org.json.JSONObject();
-                                                    result.put("success", true);
-                                                    result.put("isDirect", true);
-                                                    result.put("webPlayerUrl", currentWebUrl);
-                                                    org.json.JSONArray outStreams = new org.json.JSONArray();
-                                                    for (int i = 0; i < streamsArr.length(); i++) {
-                                                        org.json.JSONObject s = streamsArr.getJSONObject(i);
-                                                        int rNum = s.optInt("resolutions", 720);
-                                                        long sizeBytes = s.optLong("size", 0);
-                                                        double sizeMb = sizeBytes > 0 ? Math.round((sizeBytes / (1024.0 * 1024.0)) * 10.0) / 10.0 : 0;
-                                                        String streamUrl = s.optString("url", "");
-                                                        if (!streamUrl.isEmpty()) {
-                                                            org.json.JSONObject item = new org.json.JSONObject();
-                                                            item.put("quality", rNum + "p");
-                                                            item.put("resolution", rNum + "p");
-                                                            item.put("url", getProxyVideoUrl(streamUrl));
-                                                            item.put("raw_url", streamUrl);
-                                                            item.put("size_mb", sizeMb);
-                                                            item.put("format", s.optString("format", "MP4"));
-                                                            outStreams.put(item);
+                                                if (conn.getResponseCode() == 200) {
+                                                    InputStream inStream = conn.getInputStream();
+                                                    String enc = conn.getHeaderField("Content-Encoding");
+                                                    if (enc != null && enc.toLowerCase().contains("gzip")) {
+                                                        inStream = new java.util.zip.GZIPInputStream(inStream);
+                                                    }
+                                                    BufferedReader reader = new BufferedReader(new InputStreamReader(inStream, "utf-8"));
+                                                    StringBuilder sb = new StringBuilder();
+                                                    String line;
+                                                    while ((line = reader.readLine()) != null) {
+                                                        sb.append(line);
+                                                    }
+                                                    reader.close();
+
+                                                    org.json.JSONObject resObj = new org.json.JSONObject(sb.toString());
+                                                    if (resObj.optInt("code", -1) == 0 && resObj.has("data")) {
+                                                        org.json.JSONObject dataObj = resObj.getJSONObject("data");
+                                                        org.json.JSONArray streamsArr = dataObj.optJSONArray("streams");
+                                                        if (streamsArr != null && streamsArr.length() > 0) {
+                                                            org.json.JSONObject result = new org.json.JSONObject();
+                                                            result.put("success", true);
+                                                            result.put("isDirect", true);
+                                                            result.put("webPlayerUrl", currentWebUrl);
+                                                            org.json.JSONArray outStreams = new org.json.JSONArray();
+                                                            for (int i = 0; i < streamsArr.length(); i++) {
+                                                                org.json.JSONObject s = streamsArr.getJSONObject(i);
+                                                                int rNum = s.optInt("resolutions", 720);
+                                                                long sizeBytes = s.optLong("size", 0);
+                                                                double sizeMb = sizeBytes > 0 ? Math.round((sizeBytes / (1024.0 * 1024.0)) * 10.0) / 10.0 : 0;
+                                                                String streamUrl = s.optString("url", "");
+                                                                if (!streamUrl.isEmpty()) {
+                                                                    org.json.JSONObject item = new org.json.JSONObject();
+                                                                    item.put("quality", rNum + "p");
+                                                                    item.put("resolution", rNum + "p");
+                                                                    item.put("url", getProxyVideoUrl(streamUrl));
+                                                                    item.put("raw_url", streamUrl);
+                                                                    item.put("size_mb", sizeMb);
+                                                                    item.put("format", s.optString("format", "MP4"));
+                                                                    outStreams.put(item);
+                                                                }
+                                                            }
+                                                            result.put("streams", outStreams);
+                                                            String resultStr = result.toString();
+                                                            STREAM_CACHE.put(cacheKey, resultStr);
+                                                            STREAM_CACHE_TS.put(cacheKey, System.currentTimeMillis());
+                                                            return resultStr;
                                                         }
                                                     }
-                                                    result.put("streams", outStreams);
-                                                    String resultStr = result.toString();
-                                                    STREAM_CACHE.put(cacheKey, resultStr);
-                                                    STREAM_CACHE_TS.put(cacheKey, System.currentTimeMillis());
-                                                    return resultStr;
                                                 }
-                                            }
+                                            } catch (Exception ignored) {}
                                         }
                                     }
                                 }
@@ -1964,8 +2135,9 @@ public class MainActivity extends BridgeActivity {
                                                 obj.put("status", "completed");
                                                 obj.put("progress", 100);
                                                 String resolvedPath = null;
+                                                String lUri = null;
                                                 if (localUriCol != -1) {
-                                                    String lUri = cursor.getString(localUriCol);
+                                                    lUri = cursor.getString(localUriCol);
                                                     if (lUri != null && lUri.startsWith("file://")) {
                                                         resolvedPath = lUri.substring(7);
                                                     }
@@ -1978,15 +2150,21 @@ public class MainActivity extends BridgeActivity {
                                                     File lf = new File(existingPath);
                                                     if (!lf.exists() || !lf.canRead()) {
                                                         String fName = lf.getName();
-                                                        File f1 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "CineVault/" + fName);
-                                                        File f2 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fName);
-                                                        File f3 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "CineVault/" + fName);
-                                                        if (f1.exists() && f1.canRead()) lf = f1;
-                                                        else if (f2.exists() && f2.canRead()) lf = f2;
-                                                        else if (f3.exists() && f3.canRead()) lf = f3;
-                                                        else if (appContext != null) {
-                                                            File extM = new File(appContext.getExternalFilesDir(Environment.DIRECTORY_MOVIES), fName);
-                                                            if (extM.exists() && extM.canRead()) lf = extM;
+                                                        if (appContext != null) {
+                                                            File extDl = new File(appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fName);
+                                                            if (extDl.exists() && extDl.canRead()) lf = extDl;
+                                                            if (!lf.exists() || !lf.canRead()) {
+                                                                File extM = new File(appContext.getExternalFilesDir(Environment.DIRECTORY_MOVIES), fName);
+                                                                if (extM.exists() && extM.canRead()) lf = extM;
+                                                            }
+                                                        }
+                                                        if (!lf.exists() || !lf.canRead()) {
+                                                            File f1 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "CineVault/" + fName);
+                                                            File f2 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fName);
+                                                            File f3 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "CineVault/" + fName);
+                                                            if (f1.exists() && f1.canRead()) lf = f1;
+                                                            else if (f2.exists() && f2.canRead()) lf = f2;
+                                                            else if (f3.exists() && f3.canRead()) lf = f3;
                                                         }
                                                     }
                                                     if (lf.exists() && lf.canRead()) {
@@ -2002,7 +2180,11 @@ public class MainActivity extends BridgeActivity {
                                                                 null
                                                             );
                                                         } catch (Exception ignored) {}
+                                                    } else if (lUri != null && lUri.startsWith("content://")) {
+                                                        obj.put("localPath", lUri);
                                                     }
+                                                } else if (lUri != null && lUri.startsWith("content://")) {
+                                                    obj.put("localPath", lUri);
                                                 }
                                             } else if (status == android.app.DownloadManager.STATUS_RUNNING) {
                                                 obj.put("status", "downloading");
@@ -2107,6 +2289,41 @@ public class MainActivity extends BridgeActivity {
                             openExternalUrl("https://cinevaultapk.online/");
                         } catch (Exception ignored) {
                         }
+                    }
+
+                    @JavascriptInterface
+                    public boolean enterPipMode() {
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                runOnUiThread(() -> {
+                                    try {
+                                        android.app.PictureInPictureParams.Builder pipBuilder =
+                                            new android.app.PictureInPictureParams.Builder();
+                                        android.util.Rational aspectRatio = new android.util.Rational(16, 9);
+                                        pipBuilder.setAspectRatio(aspectRatio);
+                                        enterPictureInPictureMode(pipBuilder.build());
+                                    } catch (Exception e) {
+                                        try {
+                                            enterPictureInPictureMode();
+                                        } catch (Exception ignored) {}
+                                    }
+                                });
+                                return true;
+                            }
+                            return false;
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    }
+
+                    @JavascriptInterface
+                    public boolean isPipSupported() {
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                return getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE);
+                            }
+                        } catch (Exception ignored) {}
+                        return false;
                     }
                 }, "AndroidDevice");
             }
@@ -2276,6 +2493,32 @@ public class MainActivity extends BridgeActivity {
         } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT && !isImmersiveLandscape) {
             exitImmersiveFullscreen();
         }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        try {
+            if (bridge != null && bridge.getWebView() != null) {
+                bridge.getWebView().evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('pipmodechange', { detail: { inPip: " + isInPictureInPictureMode + " } }));",
+                    null
+                );
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        try {
+            if (bridge != null && bridge.getWebView() != null) {
+                bridge.getWebView().evaluateJavascript(
+                    "if (window.__cinevaultCanAutoPip && window.__cinevaultCanAutoPip()) { window.__cinevaultTriggerPip && window.__cinevaultTriggerPip(); }",
+                    null
+                );
+            }
+        } catch (Exception ignored) {}
     }
 }
 

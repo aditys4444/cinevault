@@ -70,6 +70,9 @@
   html, body, #root {
     scroll-behavior: smooth;
     background-color: #060911;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     -khtml-user-select: none;

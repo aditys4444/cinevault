@@ -1,6 +1,6 @@
 import type { HomeCatalogResponse } from '../types/movie';
 
-export const ADULT_HOME_CATALOG: HomeCatalogResponse = {
+const BUNDLED_ADULT_HOME_CATALOG: HomeCatalogResponse = {
   "featured": {
     "id": "7429426279994508032",
     "title": "365 Days [Hindi]",
@@ -2413,7 +2413,42 @@ export const ADULT_HOME_CATALOG: HomeCatalogResponse = {
   "total_titles": 131
 };
 
+const REMOTE_ADULT_KEY = 'cinevault_remote_adult';
+const ADULT_ENDPOINTS = [
+  'https://cinevaultapk.online/api/adult.json',
+  'https://cinevault-web.pages.dev/api/adult.json',
+];
+
+function loadInitialAdultCatalog(): HomeCatalogResponse {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const cached = localStorage.getItem(REMOTE_ADULT_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+          return parsed;
+        }
+      }
+    }
+  } catch {}
+  return BUNDLED_ADULT_HOME_CATALOG;
+}
+
+export let ADULT_HOME_CATALOG: HomeCatalogResponse = loadInitialAdultCatalog();
+
+type AdultListener = (catalog: HomeCatalogResponse) => void;
+const adultListeners = new Set<AdultListener>();
+
+export const subscribeToAdultCatalog = (listener: AdultListener): (() => void) => {
+  adultListeners.add(listener);
+  return () => adultListeners.delete(listener);
+};
+
+export const getAdultCatalog = (): HomeCatalogResponse => ADULT_HOME_CATALOG;
+
 // Pre-built Set of ALL adult content IDs for instant O(1) filtering
+let _adultIds = new Set<string>();
+
 const _collectAdultIds = (): Set<string> => {
   const ids = new Set<string>();
   if (ADULT_HOME_CATALOG.featured) {
@@ -2427,7 +2462,46 @@ const _collectAdultIds = (): Set<string> => {
   return ids;
 };
 
-export const ADULT_CONTENT_IDS: Set<string> = _collectAdultIds();
+_adultIds = _collectAdultIds();
+
+export const ADULT_CONTENT_IDS: Set<string> = _adultIds;
+
+export const syncRemoteAdultCatalog = async (): Promise<HomeCatalogResponse> => {
+  for (const endpoint of ADULT_ENDPOINTS) {
+    try {
+      const url = `${endpoint}?_t=${Date.now()}`;
+      const res = await fetch(url, {
+        cache: 'no-cache',
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.rows) && data.rows.length > 0) {
+          ADULT_HOME_CATALOG = data;
+          _adultIds = _collectAdultIds();
+          try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+              localStorage.setItem(REMOTE_ADULT_KEY, JSON.stringify(data));
+            }
+          } catch {}
+          adultListeners.forEach((fn) => {
+            try { fn(ADULT_HOME_CATALOG); } catch {}
+          });
+          return ADULT_HOME_CATALOG;
+        }
+      }
+    } catch {}
+  }
+  return ADULT_HOME_CATALOG;
+};
+
+// Automatic non-blocking background sync on app start
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    syncRemoteAdultCatalog().catch(() => {});
+  }, 1500);
+}
+
 
 // Comprehensive list of adult/18+/pornographic keywords, web series, and studios
 export const ADULT_KEYWORDS: string[] = [

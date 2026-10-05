@@ -270,40 +270,119 @@ export const App: React.FC = () => {
         if (isMounted) setLoading(false);
       });
 
+    const handleCatalogUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<HomeCatalogResponse>;
+      if (isMounted && customEvent.detail) {
+        setCatalog(customEvent.detail);
+        setLoading(false);
+      }
+    };
+
+    window.addEventListener('cinevault:catalog-updated', handleCatalogUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('cinevault:catalog-updated', handleCatalogUpdate);
     };
   }, []);
 
-  // Safe catalog: filters out ALL adult/18+ content from main home page
+  // Safe catalog: filters out ALL adult/18+ content and orders Short TV to the very last section
   const safeCatalog = useMemo(() => {
     if (!catalog) return null;
-    const safeFeatured = catalog.featured && !isAdultContent(catalog.featured) ? catalog.featured : null;
-    const safeRows = catalog.rows
+    const isShortRow = (title: string) => /short\s*tv|shorttv|shorts|drama\s*box|reel/i.test(title);
+    const isShortItem = (m: Movie) =>
+      m.media_type === ('short' as any) ||
+      (m as any).type === 'short' ||
+      /short\s*tv|shorttv|shorts|reel/i.test(m.title || '') ||
+      /short/i.test(m.detailPath || '');
+
+    const safeRowsClean = catalog.rows
       .map((shelf) => ({
         ...shelf,
         items: shelf.items.filter((m) => !isAdultContent(m)),
       }))
       .filter((shelf) => shelf.items.length > 0);
-    return { ...catalog, featured: safeFeatured, rows: safeRows };
-  }, [catalog]);
 
-  // Curate trending hero movies & series for the interactive swipeable top carousel
-  const trendingHeroMovies = useMemo(() => {
-    if (!safeCatalog) return [];
-    const list: Movie[] = [];
-    if (safeCatalog.featured) {
-      list.push(safeCatalog.featured);
-    }
-    if (safeCatalog.rows && safeCatalog.rows.length > 0) {
-      for (const shelf of safeCatalog.rows.slice(0, 3)) {
-        for (const item of shelf.items.slice(0, 4)) {
-          if (!list.some((m) => m.id === item.id) && (item.backdrop || item.poster)) {
-            list.push(item);
-          }
+    const standardRows = safeRowsClean.filter((shelf) => !isShortRow(shelf.title));
+    const shortTvRows = safeRowsClean.filter((shelf) => isShortRow(shelf.title));
+    const reorderedRows = [...standardRows, ...shortTvRows];
+
+    let safeFeatured = catalog.featured && !isAdultContent(catalog.featured) && !isShortItem(catalog.featured)
+      ? catalog.featured
+      : null;
+
+    if (!safeFeatured && standardRows.length > 0) {
+      for (const shelf of standardRows) {
+        const candidate = shelf.items.find((m) => m.backdrop && !m.is_coming_soon && !isShortItem(m));
+        if (candidate) {
+          safeFeatured = candidate;
+          break;
         }
       }
     }
+
+    return { ...catalog, featured: safeFeatured, rows: reorderedRows };
+  }, [catalog]);
+
+  // Curate top hero banner movies & series automatically from Top Anime, Hollywood, South Indian, Cinema Hits & Trending
+  // (Zero Short TV content allowed in hero banner)
+  const trendingHeroMovies = useMemo(() => {
+    if (!safeCatalog) return [];
+
+    const isShortItem = (m: Movie) =>
+      m.media_type === ('short' as any) ||
+      (m as any).type === 'short' ||
+      /short\s*tv|shorttv|shorts|reel/i.test(m.title || '') ||
+      /short/i.test(m.detailPath || '');
+
+    const list: Movie[] = [];
+    const addedIds = new Set<string>();
+
+    const addCandidate = (item?: Movie | null) => {
+      if (!item || !item.id || addedIds.has(item.id)) return;
+      if (isShortItem(item)) return;
+      if (!item.backdrop && !item.poster) return;
+      addedIds.add(item.id);
+      list.push(item);
+    };
+
+    // 1. If safe featured title is valid and not short tv, place at front
+    if (safeCatalog.featured) {
+      addCandidate(safeCatalog.featured);
+    }
+
+    // 2. Locate key genre shelves: Anime, Hollywood, South Indian, Cinema Hits, Bollywood / Trending
+    const rows = safeCatalog.rows || [];
+    const findShelf = (regex: RegExp) => rows.find((r) => regex.test(r.title));
+
+    const cinemaShelf = findShelf(/cinema|hit|blockbuster/i);
+    const hollywoodShelf = findShelf(/hollywood/i);
+    const southShelf = findShelf(/south\s*indian|south/i);
+    const animeShelf = findShelf(/anime/i);
+    const bollywoodShelf = findShelf(/bollywood|hindi/i);
+    const trendingShelf = findShelf(/trending|popular/i);
+
+    const targetShelves = [cinemaShelf, hollywoodShelf, southShelf, animeShelf, bollywoodShelf, trendingShelf].filter(Boolean);
+
+    // Pick top items from each priority section first (Cinema Hits, Hollywood, South Indian, Top Anime)
+    for (let round = 0; round < 2; round++) {
+      for (const shelf of targetShelves) {
+        if (shelf && shelf.items && shelf.items[round]) {
+          addCandidate(shelf.items[round]);
+        }
+      }
+    }
+
+    // 3. If list still needs items, fill from standard shelves (strictly skipping any short TV shelves)
+    for (const shelf of rows) {
+      if (/short\s*tv|shorttv|shorts|reel/i.test(shelf.title)) continue;
+      for (const item of shelf.items.slice(0, 4)) {
+        addCandidate(item);
+        if (list.length >= 8) break;
+      }
+      if (list.length >= 8) break;
+    }
+
     return list.slice(0, 8);
   }, [safeCatalog]);
 
@@ -498,7 +577,7 @@ export const App: React.FC = () => {
         />
       )}
 
-      <div className="min-h-screen bg-[#050A18] text-[#F5F7FF] flex flex-col">
+      <div className="min-h-screen bg-[#050A18] text-[#F5F7FF] flex flex-col w-full max-w-full overflow-x-hidden">
         {/* Navigation Bar */}
         {!playingMovie || isPlayerMinimized ? (
           <Navbar
@@ -515,7 +594,7 @@ export const App: React.FC = () => {
         {/* Main Content Area */}
         <main
           ref={mainRef}
-          className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-12"
+          className="flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:pb-12"
           style={playingMovie && !isPlayerMinimized ? { display: 'none' } : undefined}
         >
           {activeView === 'home' && (

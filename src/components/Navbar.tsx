@@ -63,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = memo(({
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleLogoClick();
           }}
-          className="h-10 sm:h-12 max-w-[170px] sm:max-w-[210px] flex items-center gap-2 cursor-pointer select-none focus:outline-none transition-transform active:scale-95 group"
+          className="h-10 sm:h-12 max-w-[180px] sm:max-w-[220px] flex items-center gap-2 cursor-pointer select-none focus:outline-none transition-transform active:scale-95 group"
           title={isAdultMode ? "18+ Mode Active - Click to return to Standard CineVault" : "Click logo to enter 18+ Content"}
         >
           {isAdultMode ? (
@@ -80,9 +80,9 @@ export const Navbar: React.FC<NavbarProps> = memo(({
             </div>
           ) : (
             <img
-              src="/logo-user.png"
+              src="/logo-horizontal.png"
               alt="CineVault"
-              className="h-full w-auto max-w-full object-contain"
+              className="h-7 sm:h-8 w-auto max-w-full object-contain drop-shadow-[0_2px_10px_rgba(23,107,255,0.3)]"
               draggable={false}
             />
           )}

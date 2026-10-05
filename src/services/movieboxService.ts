@@ -4,7 +4,8 @@
  * Includes in-memory TTL caching, request deduplication, and zero-preloading stream resolution.
  */
 
-import type { Movie, MovieShelf, HomeCatalogResponse, StreamResponse, StreamQuality, Season } from '../types/movie';
+import type { Movie, MovieShelf, HomeCatalogResponse, StreamResponse, StreamQuality, Season, CaptionTrack } from '../types/movie';
+import { BUNDLED_HOME_CATALOG } from '../data/homeCatalogBootstrap';
 
 // Endpoint obfuscation: prevents plaintext domain and endpoint scraping in compiled production bundles
 const _b64 = (s: string) => atob(s);
@@ -250,10 +251,10 @@ export class MovieBoxService {
   }
 
   /**
-   * Instant Cold-Start: Retrieve cached home catalog from localStorage
+   * Instant Cold-Start: Retrieve cached home catalog from localStorage or bundled bootstrap
    */
-  getStoredHomeCatalog(): HomeCatalogResponse | null {
-    if (typeof window === 'undefined') return null;
+  getStoredHomeCatalog(): HomeCatalogResponse {
+    if (typeof window === 'undefined') return BUNDLED_HOME_CATALOG;
     try {
       const saved = localStorage.getItem('cinevault_home_catalog');
       if (saved) {
@@ -263,198 +264,171 @@ export class MovieBoxService {
         }
       }
     } catch {}
-    return null;
+    return BUNDLED_HOME_CATALOG;
   }
 
   /**
    * Fetch Home Catalog (Featured Hero & Categorized Shelves)
-   * Backed by 12-hour persistent localStorage cache to prevent repeated content re-downloading and conserve mobile data.
+   * 0ms Instant Response backed by Stale-While-Revalidate and bundled bootstrap data.
    */
   async getHomeCatalog(): Promise<HomeCatalogResponse> {
     const cacheKey = 'home_catalog';
     const cached = getCached<HomeCatalogResponse>(cacheKey);
-    if (cached) return cached;
-
-    const stored = this.getStoredHomeCatalog();
-    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-
-    // Fast return: if stored catalog is available, return it immediately so app enters in 0ms!
-    // If offline or cache is younger than 4 hours, no background refetch needed.
-    let isRecent = false;
-    try {
-      const ts = parseInt(localStorage.getItem('cinevault_home_catalog_ts') || '0', 10);
-      if (ts > 0 && Date.now() - ts < 4 * 60 * 60 * 1000 && stored && stored.rows && stored.rows.length >= 6) {
-        isRecent = true;
+    if (cached) {
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        this.refreshHomeCatalogLive().catch(() => {});
       }
-    } catch {}
-
-    if (stored && (isOffline || isRecent)) {
-      setCached(cacheKey, stored, 600000);
-      return stored;
+      return cached;
     }
 
+    const stored = this.getStoredHomeCatalog();
+    setCached(cacheKey, stored, 600000);
+
+    // Trigger silent background refresh so fresh online content streams in smoothly
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      this.refreshHomeCatalogLive().catch(() => {});
+    }
+
+    return stored;
+  }
+
+  /**
+   * Background live refresh of home catalog (Stale-While-Revalidate)
+   */
+  async refreshHomeCatalogLive(): Promise<HomeCatalogResponse | null> {
+    const cacheKey = 'home_catalog_live';
     if (inFlightRequests.has(cacheKey)) {
       return inFlightRequests.get(cacheKey)!;
     }
 
-    const fetchPromise = (async (): Promise<HomeCatalogResponse> => {
-      // 1. Direct MovieBox H5 API call with snappy 3500ms timeout
-      const res = await this.request('/wefeed-h5api-bff/home', { timeoutMs: 3500 });
-      const homeData = res?.data || {};
-      const operatingList = homeData.operatingList || [];
+    const fetchPromise = (async (): Promise<HomeCatalogResponse | null> => {
+      try {
+        const res = await this.request('/wefeed-h5api-bff/home', { timeoutMs: 3500 });
+        const homeData = res?.data || {};
+        const operatingList = homeData.operatingList || [];
+        if (!operatingList.length) return null;
 
-      const rows: MovieShelf[] = [];
-      let featured: Movie | null = null;
+        const rows: MovieShelf[] = [];
+        let featured: Movie | null = null;
 
-      const badgeMap: Record<string, string> = {
-        'trending': 'TRENDING',
-        'cinema': 'CINEMA',
-        'bollywood': 'BOLLYWOOD',
-        'south indian': 'SOUTH INDIA',
-        'hollywood': 'HOLLYWOOD',
-        'series': 'SERIES',
-        'anime': 'ANIME',
-        'k-drama': 'K-DRAMA',
-        'western': 'WESTERN',
-        'short tv': 'SHORT TV',
-        'free': 'FREE',
-      };
+        const badgeMap: Record<string, string> = {
+          'trending': 'TRENDING',
+          'cinema': 'CINEMA',
+          'bollywood': 'BOLLYWOOD',
+          'south indian': 'SOUTH INDIA',
+          'hollywood': 'HOLLYWOOD',
+          'series': 'SERIES',
+          'anime': 'ANIME',
+          'k-drama': 'K-DRAMA',
+          'western': 'WESTERN',
+          'short tv': 'SHORT TV',
+          'free': 'FREE',
+        };
 
-      for (let i = 0; i < operatingList.length; i++) {
-        const op = operatingList[i];
-        const rawTitle = op.title || `Category ${i + 1}`;
-        const subjects = op.subjectList || op.subjects || [];
-        if (!subjects.length) continue;
+        for (let i = 0; i < operatingList.length; i++) {
+          const op = operatingList[i];
+          const rawTitle = op.title || `Category ${i + 1}`;
+          const subjects = op.subjectList || op.subjects || [];
+          if (!subjects.length) continue;
 
-        const lowerTitle = rawTitle.toLowerCase();
-        // Remove empty, administrative, or external promo banners
-        if (
-          lowerTitle.includes('update') ||
-          lowerTitle.includes('join us') ||
-          lowerTitle.includes('telegram') ||
-          lowerTitle.includes('whatsapp') ||
-          lowerTitle.includes('football live') ||
-          lowerTitle.includes('in banner') ||
-          lowerTitle === 'banner' ||
-          lowerTitle === 'categories'
-        ) {
-          continue;
-        }
-
-        const isComingSoon = lowerTitle.includes('coming soon');
-
-        let badge = 'POPULAR';
-        for (const [k, v] of Object.entries(badgeMap)) {
-          if (lowerTitle.includes(k)) {
-            badge = v;
-            break;
+          const lowerTitle = rawTitle.toLowerCase();
+          if (
+            lowerTitle.includes('update') ||
+            lowerTitle.includes('join us') ||
+            lowerTitle.includes('telegram') ||
+            lowerTitle.includes('whatsapp') ||
+            lowerTitle.includes('football live') ||
+            lowerTitle.includes('in banner') ||
+            lowerTitle === 'banner' ||
+            lowerTitle === 'categories'
+          ) {
+            continue;
           }
-        }
-        if (isComingSoon) badge = 'COMING SOON';
 
-        // NOTE: Scope deduplication strictly PER SHELF so popular Bollywood, South Indian, Cinema,
-        // and Hollywood titles are NOT eliminated from their genre categories!
-        const shelfSeenIds = new Set<string>();
-        const items: Movie[] = [];
-        for (const s of subjects) {
-          const m = this.formatMovie(s);
-          if (isComingSoon) {
-            m.is_coming_soon = true;
+          const isComingSoon = lowerTitle.includes('coming soon');
+
+          let badge = 'POPULAR';
+          for (const [k, v] of Object.entries(badgeMap)) {
+            if (lowerTitle.includes(k)) {
+              badge = v;
+              break;
+            }
           }
-          if (m.id && !shelfSeenIds.has(m.id)) {
-            shelfSeenIds.add(m.id);
-            items.push(m);
+          if (isComingSoon) badge = 'COMING SOON';
+
+          const shelfSeenIds = new Set<string>();
+          const items: Movie[] = [];
+          for (const s of subjects) {
+            const m = this.formatMovie(s);
+            if (isComingSoon) {
+              m.is_coming_soon = true;
+            }
+            if (m.id && !shelfSeenIds.has(m.id)) {
+              shelfSeenIds.add(m.id);
+              items.push(m);
+            }
           }
-        }
 
-        if (items.length > 0) {
-          if (!featured && items[0].backdrop && !isComingSoon && (lowerTitle.includes('trending') || lowerTitle.includes('cinema') || lowerTitle.includes('bollywood'))) {
-            featured = items[0];
-          }
-          let cleanRowTitle = rawTitle.replace(/moviebox/gi, 'CineVault');
-          if (lowerTitle.includes('hot short tv')) cleanRowTitle = '🔥 Trending Short TV';
-          else if (lowerTitle.includes('free now')) cleanRowTitle = '🆓 Free Blockbusters';
-          else if (lowerTitle.includes('coming soon')) cleanRowTitle = '⏳ Coming Soon';
-          else if (lowerTitle.includes('cinema')) cleanRowTitle = '🎬 Cinema Hits';
+          const isShortTvRow = lowerTitle.includes('short tv') || lowerTitle.includes('shorttv') || lowerTitle.includes('shorts');
 
-          rows.push({
-            id: `shelf_${i}`,
-            title: cleanRowTitle,
-            subtitle: `Curated ${cleanRowTitle}`,
-            badge,
-            items,
-          });
-        }
-      }
+          if (items.length > 0) {
+            if (!featured && !isShortTvRow && items[0].backdrop && !isComingSoon && (lowerTitle.includes('trending') || lowerTitle.includes('cinema') || lowerTitle.includes('bollywood') || lowerTitle.includes('hollywood') || lowerTitle.includes('south') || lowerTitle.includes('anime'))) {
+              featured = items[0];
+            }
+            let cleanRowTitle = rawTitle.replace(/moviebox/gi, 'CineVault');
+            if (lowerTitle.includes('hot short tv') || isShortTvRow) cleanRowTitle = '🔥 Trending Short TV';
+            else if (lowerTitle.includes('free now')) cleanRowTitle = '🆓 Free Blockbusters';
+            else if (lowerTitle.includes('coming soon')) cleanRowTitle = '⏳ Coming Soon';
+            else if (lowerTitle.includes('cinema')) cleanRowTitle = '🎬 Cinema Hits';
 
-      // If no featured found yet, take the first movie with a good backdrop
-      if (!featured && rows.length > 0 && rows[0].items.length > 0) {
-        featured = rows[0].items[0];
-      }
-
-      // 2. Resilient Fast Fallback: If /home payload dropped or empty, fetch trending in parallel
-      if (rows.length === 0) {
-        try {
-          const [trendingAll, trendingMovies, trendingTv] = await Promise.all([
-            this.getTrending('all', 1, 24),
-            this.getTrending('movie', 1, 24),
-            this.getTrending('series', 1, 24),
-          ]);
-          if (trendingAll.length > 0) {
-            featured = trendingAll[0];
             rows.push({
-              id: 'shelf_trending',
-              title: '🔥 Trending on CineVault',
-              subtitle: 'Top rated movies streaming live',
-              badge: 'TRENDING',
-              items: trendingAll,
+              id: `shelf_${i}`,
+              title: cleanRowTitle,
+              subtitle: `Curated ${cleanRowTitle}`,
+              badge,
+              items,
             });
           }
-          if (trendingMovies.length > 0) {
-            rows.push({
-              id: 'shelf_movies',
-              title: '🎬 Feature Blockbusters',
-              subtitle: 'Curated 4K master titles',
-              badge: 'CINEMA',
-              items: trendingMovies,
-            });
+        }
+
+        const standardRows = rows.filter((r) => !/short\s*tv|shorttv|shorts/i.test(r.title));
+        const shortTvRows = rows.filter((r) => /short\s*tv|shorttv|shorts/i.test(r.title));
+        rows.length = 0;
+        rows.push(...standardRows, ...shortTvRows);
+
+        if (!featured && standardRows.length > 0) {
+          for (const row of standardRows) {
+            const candidate = row.items.find((m) => m.backdrop && !m.is_coming_soon && m.media_type !== ('short' as any));
+            if (candidate) {
+              featured = candidate;
+              break;
+            }
           }
-          if (trendingTv.length > 0) {
-            rows.push({
-              id: 'shelf_series',
-              title: '📺 Archival TV & Series',
-              subtitle: 'Binge-worthy premium series',
-              badge: 'SERIES',
-              items: trendingTv,
-            });
+        }
+
+        if (rows.length > 0) {
+          const allUniqueIds = new Set<string>();
+          rows.forEach((r) => r.items.forEach((it) => { if (it.id) allUniqueIds.add(it.id); }));
+
+          const result: HomeCatalogResponse = {
+            featured,
+            rows,
+            total_titles: allUniqueIds.size,
+          };
+
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('cinevault_home_catalog', JSON.stringify(result));
+              localStorage.setItem('cinevault_home_catalog_ts', String(Date.now()));
+              window.dispatchEvent(new CustomEvent('cinevault:catalog-updated', { detail: result }));
+            } catch {}
           }
-        } catch {}
-      }
 
-      // If network fetch failed to get any rows, gracefully fallback to previously stored catalog
-      if (rows.length === 0 && stored) {
-        setCached(cacheKey, stored, 600000);
-        return stored;
-      }
-
-      const allUniqueIds = new Set<string>();
-      rows.forEach((r) => r.items.forEach((it) => { if (it.id) allUniqueIds.add(it.id); }));
-
-      const result: HomeCatalogResponse = {
-        featured,
-        rows,
-        total_titles: allUniqueIds.size,
-      };
-
-      if (typeof window !== 'undefined' && rows.length > 0) {
-        try {
-          localStorage.setItem('cinevault_home_catalog', JSON.stringify(result));
-          localStorage.setItem('cinevault_home_catalog_ts', String(Date.now()));
-        } catch {}
-      }
-
-      setCached(cacheKey, result, 600000);
-      return result;
+          setCached('home_catalog', result, 600000);
+          return result;
+        }
+      } catch {}
+      return null;
     })();
 
     inFlightRequests.set(cacheKey, fetchPromise);
@@ -706,27 +680,33 @@ export class MovieBoxService {
   /**
    * Fetch Stream URLs (Direct CDN MP4 Streams)
    */
-  private cachedMzfiToken = '';
-  private mzfiTokenExpiry = 0;
+  private cachedMzfiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjc0MDk3NDg3NjU0NTg3MTg4NDgsImF0cCI6MywiZXh0IjoiMTc5MDY5MTgwOCIsImV4cCI6MTc5ODQ2NzgwOCwiaWF0IjoxNzkwNjkxNTA4fQ.wYD3dZn6Luu6rVpEbGJ6GyFctbFvjrfp9m25BUcODao';
+  private mzfiTokenExpiry = Date.now() + 86400000 * 30;
 
   async getMzfiToken(): Promise<string> {
     if (this.cachedMzfiToken && Date.now() < this.mzfiTokenExpiry) {
       return this.cachedMzfiToken;
     }
-    // 1. Android Native Bridge fetch
+    // 1. Android Native Bridge fetch with dual domain retry
     if (typeof window !== 'undefined' && (window as any).AndroidDevice?.fetchMovieBox) {
-      try {
-        const str = (window as any).AndroidDevice.fetchMovieBox(`${MOVIEBOX_DOMAIN}/wefeed-h5api-bff/subject/trending?page=1&perPage=1`, '');
-        if (str && !str.startsWith('{"error"')) {
-          const parsed = JSON.parse(str);
-          const token = parsed._token || parsed.token || '';
-          if (token) {
-            this.cachedMzfiToken = token;
-            this.mzfiTokenExpiry = Date.now() + 3600000;
-            return token;
+      const endpoints = [
+        `${MOVIEBOX_DOMAIN}/wefeed-h5api-bff/subject/trending?page=1&perPage=1`,
+        `${MOVIEBOX_API_BASE}/wefeed-h5api-bff/subject/trending?page=1&perPage=1`,
+      ];
+      for (const ep of endpoints) {
+        try {
+          const str = (window as any).AndroidDevice.fetchMovieBox(ep, '');
+          if (str && !str.startsWith('{"error"')) {
+            const parsed = JSON.parse(str);
+            const token = parsed.__token__ || parsed._token || parsed.token || '';
+            if (token) {
+              this.cachedMzfiToken = token;
+              this.mzfiTokenExpiry = Date.now() + 86400000 * 30;
+              return token;
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
     }
     // 2. Web fallback fetch
     try {
@@ -747,11 +727,11 @@ export class MovieBoxService {
       }
       if (resolved) {
         this.cachedMzfiToken = resolved;
-        this.mzfiTokenExpiry = Date.now() + 3600000;
+        this.mzfiTokenExpiry = Date.now() + 86400000 * 30;
         return resolved;
       }
     } catch {}
-    return '';
+    return this.cachedMzfiToken;
   }
 
   /**
@@ -871,7 +851,7 @@ export class MovieBoxService {
               }
             });
 
-            const timeoutGuard = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000));
+            const timeoutGuard = new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000));
             resStr = await Promise.race([asyncPromise, timeoutGuard]);
           } else {
             // Fallback for older interface: yield execution micro-tick before synchronous call
@@ -924,7 +904,7 @@ export class MovieBoxService {
         }
       }
 
-      // 2. Direct MovieBox H5 API with retry and token refresh
+      // 2. Direct MovieBox H5 API with dual-domain retry and token refresh
       const attempts = isTv
         ? (reqSe > 1 || reqEp > 1 ? [[reqSe, reqEp], [reqSe, 0], [1, 1], [0, 0]] : [[1, 1], [0, 0]])
         : [[0, 0], [1, 1]];
@@ -936,35 +916,52 @@ export class MovieBoxService {
           for (const [attSe, attEp] of attempts) {
             try {
               const apiPath = `/wefeed-h5api-bff/subject/play?subjectId=${id}&se=${attSe}&ep=${attEp}&detailPath=${curPath}&streamSignType=0`;
-              const playUrl = isAndroid ? `${MOVIEBOX_DOMAIN}${apiPath}` : `/api/mzfi${apiPath}`;
+              const playDomains = [MOVIEBOX_DOMAIN, MOVIEBOX_API_BASE];
               let resJson: any = null;
 
-              if (isAndroid && (window as any).AndroidDevice?.fetchMovieBox) {
-                const resStr = (window as any).AndroidDevice.fetchMovieBox(playUrl, '');
-                if (resStr && !resStr.startsWith('{"error"')) {
-                  resJson = JSON.parse(resStr);
-                }
-              }
+              for (const playDom of playDomains) {
+                const playUrl = isAndroid ? `${playDom}${apiPath}` : (playDom === MOVIEBOX_DOMAIN ? `/api/mzfi${apiPath}` : `/api/moviebox${apiPath}`);
 
-              if (!resJson || !resJson.data?.streams?.length) {
-                let token = attemptRound > 0 ? '' : await this.getMzfiToken();
-                if (!token || attemptRound > 0) {
-                  this.cachedMzfiToken = '';
-                  this.mzfiTokenExpiry = 0;
-                  token = await this.getMzfiToken();
+                if (isAndroid && (window as any).AndroidDevice?.fetchMovieBox) {
+                  const resStr = (window as any).AndroidDevice.fetchMovieBox(playUrl, '');
+                  if (resStr && !resStr.startsWith('{"error"')) {
+                    try {
+                      const tempJson = JSON.parse(resStr);
+                      if (tempJson?.data?.streams?.length > 0) {
+                        resJson = tempJson;
+                        break;
+                      }
+                    } catch {}
+                  }
                 }
-                const reqHeaders: Record<string, string> = {
-                  'Origin': MOVIEBOX_DOMAIN,
-                  'Referer': `${MOVIEBOX_DOMAIN}/spa/videoPlayPage/movies/${curPath}?id=${id}&type=/movie/detail&detailSe=${attSe}&detailEp=${attEp}&lang=en`,
-                };
-                if (token) reqHeaders['token'] = token;
 
-                const res = await fetch(playUrl, {
-                  headers: reqHeaders,
-                  signal: AbortSignal.timeout(6000),
-                });
-                if (res.ok) {
-                  resJson = await res.json();
+                if (!resJson || !resJson.data?.streams?.length) {
+                  let token = attemptRound > 0 ? '' : await this.getMzfiToken();
+                  if (!token || attemptRound > 0) {
+                    this.cachedMzfiToken = '';
+                    this.mzfiTokenExpiry = 0;
+                    token = await this.getMzfiToken();
+                  }
+                  const reqHeaders: Record<string, string> = {
+                    'Origin': MOVIEBOX_DOMAIN,
+                    'Referer': `${MOVIEBOX_DOMAIN}/spa/videoPlayPage/movies/${curPath}?id=${id}&type=/movie/detail&detailSe=${attSe}&detailEp=${attEp}&lang=en`,
+                  };
+                  if (token) {
+                    reqHeaders['token'] = token;
+                    reqHeaders['Cookie'] = `token=${token}`;
+                  }
+
+                  const res = await fetch(playUrl, {
+                    headers: reqHeaders,
+                    signal: AbortSignal.timeout(5000),
+                  });
+                  if (res.ok) {
+                    const tempJson = await res.json();
+                    if (tempJson?.data?.streams?.length > 0) {
+                      resJson = tempJson;
+                      break;
+                    }
+                  }
                 }
               }
 
@@ -1265,20 +1262,56 @@ export class MovieBoxService {
     setCached(cacheKey, movie, 86400000);
     return movie;
   }
+
+  /**
+   * Fetch available Subtitles / Captions for a Movie or Series Episode
+   */
+  async getCaptions(id: string, season: number = 0, episode: number = 0): Promise<CaptionTrack[]> {
+    if (!id) return [];
+    const cacheKey = `captions_${id}_${season}_${episode}`;
+    const cached = getCached<CaptionTrack[]>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const endpoints = [
+        `/wefeed-h5api-bff/subject/caption?id=${id}&subjectId=${id}&se=${season}&ep=${episode}`,
+        `/wefeed-h5api-bff/subject/caption?id=${id}&subjectId=${id}`,
+      ];
+
+      for (const ep of endpoints) {
+        const res = await this.request(ep, { timeoutMs: 3500 });
+        const list = res?.data?.captions || res?.data?.list || res?.data?.items || res?.data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          const tracks: CaptionTrack[] = list
+            .map((c: any, index: number) => {
+              const lang = (c.lang || c.language || c.languageName || c.name || c.title || 'Subtitles').trim();
+              const url = extractMediaUrl(c.url || c.file || c.link || c.path || c.src || c);
+              if (!url) return null;
+              return {
+                id: `caption_${id}_${index}_${lang.toLowerCase().replace(/\s+/g, '_')}`,
+                language: lang,
+                label: lang.charAt(0).toUpperCase() + lang.slice(1),
+                url,
+                format: url.endsWith('.vtt') ? 'vtt' : url.endsWith('.srt') ? 'srt' : 'vtt',
+                isDefault: index === 0 && (lang.toLowerCase().includes('en') || lang.toLowerCase().includes('default')),
+              } as CaptionTrack;
+            })
+            .filter(Boolean) as CaptionTrack[];
+
+          if (tracks.length > 0) {
+            setCached(cacheKey, tracks, 3600000);
+            return tracks;
+          }
+        }
+      }
+    } catch {}
+
+    return [];
+  }
 }
 
 export const movieboxService = new MovieBoxService();
 
-export function getStoredHomeCatalog(): HomeCatalogResponse | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem('cinevault_home_catalog');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.rows && parsed.rows.length > 0) {
-        return parsed;
-      }
-    }
-  } catch {}
-  return null;
+export function getStoredHomeCatalog(): HomeCatalogResponse {
+  return movieboxService.getStoredHomeCatalog();
 }

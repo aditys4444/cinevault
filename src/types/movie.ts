@@ -61,12 +61,22 @@ export interface StreamQuality {
   isHls?: boolean;
 }
 
+export interface CaptionTrack {
+  id: string;
+  language: string;
+  label: string;
+  url?: string;
+  format?: 'vtt' | 'srt' | 'ass';
+  isDefault?: boolean;
+}
+
 export interface StreamResponse {
   streamUrl: string;
   qualities: StreamQuality[];
   webPlayerUrl: string;
   isDirect: boolean;
   isTrailer?: boolean;
+  captions?: CaptionTrack[];
 }
 
 export interface DownloadItem {

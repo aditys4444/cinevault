@@ -59,7 +59,10 @@ export const BottomNav: React.FC<BottomNavProps> = memo(({
 }) => {
   return (
     <nav
-      className="fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-40 md:hidden w-[90%] max-w-sm px-3 py-2 rounded-full bg-[#0E1726]/85 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.8),0_0_18px_rgba(23,107,255,0.25)] flex items-center justify-between"
+      className="fixed left-1/2 -translate-x-1/2 z-40 md:hidden w-[92%] max-w-sm px-3 py-2 rounded-full bg-[#0E1726]/95 border border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.85),0_0_18px_rgba(23,107,255,0.25)] flex items-center justify-between"
+      style={{
+        bottom: 'max(12px, calc(env(safe-area-inset-bottom, 0px) + 8px))',
+      }}
       role="tablist"
       aria-label="Main navigation"
     >

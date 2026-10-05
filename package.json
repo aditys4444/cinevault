@@ -1,7 +1,7 @@
 {
   "name": "aditya-proj",
   "private": true,
-  "version": "2.6.8",
+  "version": "2.8.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,9 @@
     "server": "node server/src/server.js",
     "server:dev": "node --watch server/src/server.js",
     "build:apk": "npm run build && npx cap sync android && cd android && .\\gradlew.bat assembleDebug && cd .. && copy android\\app\\build\\outputs\\apk\\debug\\app-debug.apk CineVault.apk",
-    "notify": "node scripts/send-notification.cjs"
+    "notify": "node scripts/send-notification.cjs",
+    "sync:web": "node scripts/sync-website.cjs",
+    "push:content": "node scripts/push-content.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",

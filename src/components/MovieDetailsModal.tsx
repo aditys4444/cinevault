@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
-import type { Movie, Season } from '../types/movie';
+import type { Movie, Season, StreamQuality } from '../types/movie';
 import { movieboxService } from '../services/movieboxService';
 import { cacheService } from '../services/cacheService';
 import { Play, X, Bookmark, Film, Tv, Clock, Calendar, Loader2, Download, Check, Share2 } from 'lucide-react';
+import { DownloadQualityModal } from './DownloadQualityModal';
 
 interface MovieDetailsModalProps {
   movie: Movie | null;
@@ -29,6 +30,12 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
   const [isLaunching, setIsLaunching] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadFeedback, setDownloadFeedback] = useState<string | null>(null);
+
+  // Quality selector modal state
+  const [isQualityModalOpen, setIsQualityModalOpen] = useState(false);
+  const [downloadQualities, setDownloadQualities] = useState<StreamQuality[]>([]);
+  const [isResolvingQualities, setIsResolvingQualities] = useState(false);
+  const [downloadTargetEpisode, setDownloadTargetEpisode] = useState<{ season: number; episode: number } | null>(null);
 
   // Reset errors & states when movie changes
   useEffect(() => {
@@ -115,33 +122,68 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
   const activeSeasonObj = seasons.find((s) => s.season_number === selectedSeason) || seasons[0];
   const episodes = activeSeasonObj?.episodes || [];
 
-  const handleStartDownload = async () => {
-    if (!currentMovie || isDownloading) return;
+  const handleOpenDownloadSelector = async (targetSeason?: number, targetEpisode?: number) => {
+    if (!currentMovie) return;
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
-    setIsDownloading(true);
-    setDownloadFeedback('Resolving download stream...');
+
+    const sToUse = isTv ? (targetSeason ?? selectedSeason) : undefined;
+    const epToUse = isTv ? (targetEpisode ?? selectedEpisode) : undefined;
+    if (isTv && sToUse && epToUse) {
+      setDownloadTargetEpisode({ season: sToUse, episode: epToUse });
+    } else {
+      setDownloadTargetEpisode(null);
+    }
+
+    setIsQualityModalOpen(true);
+    setIsResolvingQualities(true);
+
     try {
       const streams = await movieboxService.getStreams(
         currentMovie.id,
         currentMovie.detailPath,
         currentMovie.media_type,
-        isTv ? selectedSeason : undefined,
-        isTv ? selectedEpisode : undefined,
+        sToUse,
+        epToUse,
         currentMovie.title
       );
-      if (!streams || !streams.streamUrl) {
-        throw new Error('Direct download stream unavailable for this title');
+      if (streams && Array.isArray(streams.qualities) && streams.qualities.length > 0) {
+        setDownloadQualities(streams.qualities);
+      } else if (streams?.streamUrl) {
+        setDownloadQualities([{
+          quality: 'HD',
+          resolution: '720p',
+          url: streams.streamUrl,
+        }]);
+      } else {
+        setDownloadQualities([]);
       }
-      const quality = streams.qualities?.[0]?.quality?.replace(/ Direct.*/i, '') || 'HD';
+    } catch {
+      setDownloadQualities([]);
+    } finally {
+      setIsResolvingQualities(false);
+    }
+  };
+
+  const handleSelectDownloadQuality = async (q: StreamQuality) => {
+    if (!currentMovie) return;
+    setIsQualityModalOpen(false);
+    setIsDownloading(true);
+    const cleanQ = q.quality.replace(/ Direct.*/i, '') || 'HD';
+    setDownloadFeedback(`Starting download in ${cleanQ}...`);
+
+    try {
+      const seasonToUse = downloadTargetEpisode?.season ?? (isTv ? selectedSeason : undefined);
+      const epToUse = downloadTargetEpisode?.episode ?? (isTv ? selectedEpisode : undefined);
+
       await cacheService.startDownload(
         currentMovie,
-        streams.streamUrl,
-        quality,
-        isTv ? selectedSeason : undefined,
-        isTv ? selectedEpisode : undefined
+        q.url,
+        cleanQ,
+        seasonToUse,
+        epToUse
       );
-      setDownloadFeedback('Download started! Added to Downloads section.');
-      setTimeout(() => setDownloadFeedback(null), 3500);
+      setDownloadFeedback(`Download started in ${cleanQ}! Check Downloads section.`);
+      setTimeout(() => setDownloadFeedback(null), 4000);
     } catch (err: any) {
       setDownloadFeedback(err?.message || 'Download failed to start');
       setTimeout(() => setDownloadFeedback(null), 3500);
@@ -343,7 +385,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
             <button
               type="button"
               disabled={isDownloading}
-              onClick={handleStartDownload}
+              onClick={() => handleOpenDownloadSelector()}
               className="flex items-center justify-center gap-2 px-4 sm:px-5 py-3 rounded-xl border text-sm font-semibold min-h-[48px] transition-all cursor-pointer bg-[#0E172B] border-white/[0.08] hover:bg-[#16223D] hover:border-[#35A7FF]/40 text-[#8D9AB5] hover:text-[#F5F7FF] press-feedback"
               title="Download for offline playback"
             >
@@ -462,24 +504,41 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
               )}
 
               {/* Episode Grid with 44dp+ touch targets */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-52 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-52 overflow-y-auto pr-1">
                 {episodes.length > 0 ? (
                   episodes.map((ep) => (
-                    <button
+                    <div
                       key={ep.episode_number}
-                      type="button"
-                      onClick={() => {
-                        queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
-                        setSelectedEpisode(ep.episode_number);
-                      }}
-                      className={`py-2.5 px-2 rounded-xl text-xs font-semibold text-center border min-h-[44px] flex items-center justify-center transition-all cursor-pointer press-feedback ${
+                      className={`rounded-xl border min-h-[44px] flex items-center justify-between p-1 transition-all ${
                         selectedEpisode === ep.episode_number
                           ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white border-transparent font-bold shadow-md shadow-[#176BFF]/30'
                           : 'bg-[#0E172B] border-white/[0.08] hover:bg-[#16223D] text-[#8D9AB5] hover:text-[#F5F7FF]'
                       }`}
                     >
-                      Episode {ep.episode_number}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
+                          setSelectedEpisode(ep.episode_number);
+                        }}
+                        className="flex-1 py-1.5 px-2 text-xs font-semibold text-left truncate cursor-pointer"
+                      >
+                        Ep {ep.episode_number}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedEpisode(ep.episode_number);
+                          handleOpenDownloadSelector(selectedSeason, ep.episode_number);
+                        }}
+                        className="w-7 h-7 rounded-lg hover:bg-white/20 active:scale-95 flex items-center justify-center shrink-0 cursor-pointer transition-all text-inherit"
+                        title={`Download Season ${selectedSeason} Episode ${ep.episode_number}`}
+                        aria-label={`Download Episode ${ep.episode_number}`}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ))
                 ) : (
                   <p className="text-xs text-[#8D9AB5] col-span-full py-2">No episodes listed for this season.</p>
@@ -488,6 +547,20 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
             </div>
           )}
         </div>
+
+        {/* Download Quality Selector Modal */}
+        {isQualityModalOpen && currentMovie && (
+          <DownloadQualityModal
+            isOpen={isQualityModalOpen}
+            onClose={() => setIsQualityModalOpen(false)}
+            movie={currentMovie}
+            season={downloadTargetEpisode?.season ?? (isTv ? selectedSeason : undefined)}
+            episode={downloadTargetEpisode?.episode ?? (isTv ? selectedEpisode : undefined)}
+            qualities={downloadQualities}
+            isLoading={isResolvingQualities}
+            onSelectQuality={handleSelectDownloadQuality}
+          />
+        )}
       </div>
     </div>
   );
