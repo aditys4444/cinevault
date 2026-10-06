@@ -320,6 +320,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     }
   });
   const [isQualityMenuOpen, setIsQualityMenuOpen] = useState<boolean>(false);
+  const [isSwitchingQuality, setIsSwitchingQuality] = useState<boolean>(false);
+  const [switchingQualityName, setSwitchingQualityName] = useState<string>('');
+  const isSwitchingQualityRef = useRef<boolean>(false);
+  const qualitySwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1036,9 +1040,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   // Compute Active Stream URL from Quality Selection
   const activeStreamUrl = useMemo(() => {
     if (!streamInfo) return '';
-    if (streamInfo.isDirect && streamInfo.streamUrl) {
-      return streamInfo.streamUrl;
-    }
+    // If quality variants are available, always resolve to the user's selected quality
     if (streamInfo.qualities && streamInfo.qualities.length > 0) {
       if (selectedQuality === 'Auto') {
         const optimal = movieboxService.getOptimalStartupQuality(streamInfo.qualities);
@@ -1047,7 +1049,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       const matched = streamInfo.qualities.find((q) =>
         q.quality.toLowerCase().includes(selectedQuality.toLowerCase())
       );
-      return matched?.url || streamInfo.streamUrl || streamInfo.qualities[0].url;
+      if (matched?.url) return matched.url;
+      return streamInfo.streamUrl || streamInfo.qualities[0].url;
     }
     return streamInfo.streamUrl || '';
   }, [streamInfo, selectedQuality]);
@@ -1269,14 +1272,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       savedPositionRef.current = 0;
       try {
         video.currentTime = pos;
+        isSeekingRef.current = true;
       } catch {}
     }
 
     // Apply speed setting
     video.playbackRate = playbackSpeed;
 
-    // Only invoke safePlay if video is paused (prevents Chromium decoder restart lag on autoPlay)
-    if (video.paused) {
+    // Immediately trigger playback if we were playing before or switching quality
+    if (isSwitchingQualityRef.current || wasPlayingBeforeSeekRef.current || video.paused) {
       safePlay();
     }
   };
@@ -1303,6 +1307,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       waitingTimerRef.current = null;
     }
     setIsBuffering(false);
+
+    if (isSwitchingQualityRef.current) {
+      isSwitchingQualityRef.current = false;
+      setIsSwitchingQuality(false);
+      if (qualitySwitchTimeoutRef.current) {
+        clearTimeout(qualitySwitchTimeoutRef.current);
+        qualitySwitchTimeoutRef.current = null;
+      }
+      if (wasPlayingBeforeSeekRef.current) {
+        safePlay();
+      }
+    }
+
     if (isSeekingRef.current) {
       isSeekingRef.current = false;
       if (wasPlayingBeforeSeekRef.current) {
@@ -1412,18 +1429,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     setError('Playback connection interrupted. Tap Retry to reconnect.');
   };
 
-  // Quality Switching
-  const handleSelectQuality = (qualityName: string) => {
-    if (videoRef.current && videoRef.current.currentTime > 0) {
-      savedPositionRef.current = videoRef.current.currentTime;
+  // Quality Switching — Instant & Seamless
+  const handleSelectQuality = useCallback((qualityName: string) => {
+    if (qualityName === selectedQuality) {
+      setIsQualityMenuOpen(false);
+      return;
     }
+    const video = videoRef.current;
+    const currentPos = video && video.currentTime > 0 ? video.currentTime : 0;
+    const wasPlaying = video ? !video.paused : isPlaying;
+
+    savedPositionRef.current = currentPos;
+    wasPlayingBeforeSeekRef.current = wasPlaying;
+    isSwitchingQualityRef.current = true;
+    setIsSwitchingQuality(true);
+    setSwitchingQualityName(qualityName.replace(/ Direct.*/i, ''));
+
     try {
       localStorage.setItem('cinevault_preferred_quality', qualityName);
     } catch {}
+
     setSelectedQuality(qualityName);
     setIsQualityMenuOpen(false);
-    showToast(`Quality: ${qualityName.replace(/ Direct.*/i, '')}`);
-  };
+    showToast(`Switching to ${qualityName.replace(/ Direct.*/i, '')}...`);
+
+    if (qualitySwitchTimeoutRef.current) clearTimeout(qualitySwitchTimeoutRef.current);
+    qualitySwitchTimeoutRef.current = setTimeout(() => {
+      isSwitchingQualityRef.current = false;
+      setIsSwitchingQuality(false);
+    }, 4000);
+  }, [selectedQuality, isPlaying]);
 
   // Playback Speed
   const handleSelectSpeed = (speed: number) => {
@@ -1814,6 +1849,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
             )}
             <span className="text-xs sm:text-sm font-bold font-mono text-white tracking-wider">
               {activeGesture === 'volume' ? `Volume ${gestureValue}%` : `Brightness ${gestureValue}%`}
+            </span>
+          </div>
+        )}
+
+        {/* Quality Switching Pill Indicator */}
+        {!isMinimized && isSwitchingQuality && (
+          <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0B1224]/95 backdrop-blur-xl border border-[#35A7FF]/40 shadow-[0_8px_32px_rgba(23,107,255,0.45)] pointer-events-none animate-fade-in">
+            <Loader2 className="w-3.5 h-3.5 text-[#35A7FF] animate-spin" />
+            <span className="text-xs font-bold font-mono text-white tracking-wider">
+              Switching to {switchingQualityName || selectedQuality}...
             </span>
           </div>
         )}
@@ -2652,94 +2697,84 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
                   </div>
                 )}
 
-                {/* Caption / Subtitles Button (Replaces lower PiP button) */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!hasCaptions) {
-                        showToast('No subtitles available for this title');
-                        return;
-                      }
-                      setIsCaptionMenuOpen((prev) => !prev);
-                      setIsQualityMenuOpen(false);
-                      setIsSpeedMenuOpen(false);
-                      setIsLanguageMenuOpen(false);
-                      setIsEpisodesMenuOpen(false);
-                    }}
-                    className={`h-10 px-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all press-feedback ${
-                      hasCaptions
-                        ? selectedCaption !== 'off'
+                {/* Caption / Subtitles Button (Visible ONLY when title has available captions) */}
+                {hasCaptions && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsCaptionMenuOpen((prev) => !prev);
+                        setIsQualityMenuOpen(false);
+                        setIsSpeedMenuOpen(false);
+                        setIsLanguageMenuOpen(false);
+                        setIsEpisodesMenuOpen(false);
+                      }}
+                      className={`h-10 px-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all press-feedback ${
+                        selectedCaption !== 'off'
                           ? 'text-[#35A7FF] bg-[#176BFF]/25 border border-[#35A7FF]/50 shadow-[0_0_12px_rgba(23,107,255,0.3)]'
                           : 'text-gray-300 hover:text-white active:bg-white/10'
-                        : 'text-gray-500 opacity-60 hover:opacity-100'
-                    }`}
-                    title={
-                      hasCaptions
-                        ? `${availableCaptionTracks.length} Caption Language${availableCaptionTracks.length > 1 ? 's' : ''} Available`
-                        : 'No captions available'
-                    }
-                    aria-label="Captions / Subtitles"
-                  >
-                    <Subtitles className={`w-5 h-5 ${hasCaptions ? 'text-[#35A7FF]' : 'text-gray-500'}`} />
-                    <span
-                      className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md ${
-                        hasCaptions
-                          ? selectedCaption !== 'off'
+                      }`}
+                      title={`${availableCaptionTracks.length} Caption Language${availableCaptionTracks.length > 1 ? 's' : ''} Available`}
+                      aria-label="Captions / Subtitles"
+                    >
+                      <Subtitles className="w-5 h-5 text-[#35A7FF]" />
+                      <span
+                        className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md ${
+                          selectedCaption !== 'off'
                             ? 'bg-[#176BFF] text-white'
                             : 'bg-[#176BFF]/20 text-[#35A7FF] border border-[#35A7FF]/30'
-                          : 'bg-white/5 text-gray-500'
-                      }`}
-                    >
-                      {hasCaptions ? `CC ${availableCaptionTracks.length}` : 'CC 0'}
-                    </span>
-                  </button>
-
-                  {/* Upward Subtitle / CC Menu in Lower Controls Bar */}
-                  {hasCaptions && isCaptionMenuOpen && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute bottom-full right-0 mb-3 w-56 max-h-64 overflow-y-auto bg-[#0B1224] border border-white/[0.12] rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1 backdrop-blur-xl animate-fade-in custom-scrollbar"
-                    >
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono flex items-center justify-between border-b border-white/[0.08] mb-1">
-                        <span>Subtitles / CC</span>
-                        <span className="text-[#35A7FF]">{availableCaptionTracks.length} Languages</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectCaption('off')}
-                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                          selectedCaption === 'off'
-                            ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
-                            : 'text-gray-300 hover:bg-[#16223D]'
                         }`}
                       >
-                        <span>Off (No Captions)</span>
-                        {selectedCaption === 'off' && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
-                      </button>
+                        CC {availableCaptionTracks.length}
+                      </span>
+                    </button>
 
-                      {availableCaptionTracks.map((track) => {
-                        const isSelected = selectedCaption === track.id || selectedCaption === track.language;
-                        return (
-                          <button
-                            key={track.id}
-                            type="button"
-                            onClick={() => handleSelectCaption(track.id, track.label)}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                              isSelected
-                                ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
-                                : 'text-gray-300 hover:bg-[#16223D]'
-                            }`}
-                          >
-                            <span className="truncate">{track.label || track.language}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                    {/* Upward Subtitle / CC Menu in Lower Controls Bar */}
+                    {isCaptionMenuOpen && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute bottom-full right-0 mb-3 w-56 max-h-64 overflow-y-auto bg-[#0B1224] border border-white/[0.12] rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1 backdrop-blur-xl animate-fade-in custom-scrollbar"
+                      >
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-[#8D9AB5] px-2 py-1 font-mono flex items-center justify-between border-b border-white/[0.08] mb-1">
+                          <span>Subtitles / CC</span>
+                          <span className="text-[#35A7FF]">{availableCaptionTracks.length} Languages</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectCaption('off')}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                            selectedCaption === 'off'
+                              ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                              : 'text-gray-300 hover:bg-[#16223D]'
+                          }`}
+                        >
+                          <span>Off (No Captions)</span>
+                          {selectedCaption === 'off' && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
+                        </button>
+
+                        {availableCaptionTracks.map((track) => {
+                          const isSelected = selectedCaption === track.id || selectedCaption === track.language;
+                          return (
+                            <button
+                              key={track.id}
+                              type="button"
+                              onClick={() => handleSelectCaption(track.id, track.label)}
+                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold shadow-[0_2px_8px_rgba(23,107,255,0.35)]'
+                                  : 'text-gray-300 hover:bg-[#16223D]'
+                              }`}
+                            >
+                              <span className="truncate">{track.label || track.language}</span>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Fullscreen Button */}
                 <button

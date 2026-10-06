@@ -38,7 +38,7 @@ const DEFAULT_PROFILE: UserProfile = {
 };
 
 export const App: React.FC = () => {
-  // Splash Screen State
+  // Startup Splash Screen State
   const [showSplash, setShowSplash] = useState<boolean>(true);
 
   // 18+ Vault Mode (Secretly toggled by clicking the logo at the top left)
@@ -132,7 +132,6 @@ export const App: React.FC = () => {
           if (result.hasUpdate && result.updateInfo) {
             setAvailableUpdate(result.updateInfo);
             setIsMandatoryUpdate(result.isMandatory);
-            setShowSplash(false);
             if (result.isMandatory) {
               setPlayingMovie(null);
             }
@@ -364,13 +363,28 @@ export const App: React.FC = () => {
 
     const targetShelves = [cinemaShelf, hollywoodShelf, southShelf, animeShelf, bollywoodShelf, trendingShelf].filter(Boolean);
 
-    // Pick top items from each priority section first (Cinema Hits, Hollywood, South Indian, Top Anime)
-    for (let round = 0; round < 2; round++) {
+    // Pick top items from each priority section first (preferring high-definition backdrops)
+    for (const shelf of targetShelves) {
+      if (shelf && shelf.items) {
+        // Find best candidate with landscape backdrop
+        const candidate = shelf.items.find((m) => !addedIds.has(m.id) && m.backdrop && !isShortItem(m));
+        if (candidate) {
+          addCandidate(candidate);
+        } else if (shelf.items[0]) {
+          addCandidate(shelf.items[0]);
+        }
+      }
+    }
+
+    // Second pass to ensure at least 6-8 hero slides
+    for (let round = 1; round < 3; round++) {
       for (const shelf of targetShelves) {
         if (shelf && shelf.items && shelf.items[round]) {
           addCandidate(shelf.items[round]);
         }
+        if (list.length >= 8) break;
       }
+      if (list.length >= 8) break;
     }
 
     // 3. If list still needs items, fill from standard shelves (strictly skipping any short TV shelves)
@@ -489,21 +503,6 @@ export const App: React.FC = () => {
 
   const handleSelectMovie = useCallback((movie: Movie) => {
     setSelectedMovie(movie);
-    // Pre-warm stream in background after modal renders so tap response is instantaneous
-    if (movie?.id) {
-      setTimeout(() => {
-        movieboxService
-          .getStreams(
-            movie.id,
-            movie.detailPath,
-            movie.media_type,
-            movie.media_type === 'tv' ? 1 : undefined,
-            movie.media_type === 'tv' ? 1 : undefined,
-            movie.title
-          )
-          .catch(() => {});
-      }, 350);
-    }
   }, []);
 
   const handleCloseDetails = useCallback(() => {
@@ -569,12 +568,9 @@ export const App: React.FC = () => {
 
   return (
     <ErrorBoundary>
-      {/* Startup Splash Screen with Uncropped Logo */}
+      {/* Luxury Cinematic Startup Splash Screen */}
       {showSplash && (
-        <SplashScreen
-          onComplete={() => setShowSplash(false)}
-          isReady={Boolean(catalog || !loading)}
-        />
+        <SplashScreen onComplete={() => setShowSplash(false)} />
       )}
 
       <div className="min-h-screen bg-[#050A18] text-[#F5F7FF] flex flex-col w-full max-w-full overflow-x-hidden">
@@ -743,6 +739,8 @@ export const App: React.FC = () => {
               onPlay={handlePlayMovie}
               isWatchlisted={watchlistIds.has(selectedMovie.id)}
               onToggleWatchlist={toggleWatchlist}
+              onSelectMovie={handleSelectMovie}
+              catalogRows={isAdultMode ? (ADULT_HOME_CATALOG.rows || []) : (safeCatalog?.rows || [])}
             />
           </Suspense>
         )}

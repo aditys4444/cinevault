@@ -171,7 +171,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = memo(({
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      {/* Background Hero Backdrop Image */}
+      {/* Background Hero Backdrop Image — Crisp 1:1 Pixel Presentation */}
       <img
         key={currentMovie.id}
         src={bgImage}
@@ -182,14 +182,19 @@ export const HeroBanner: React.FC<HeroBannerProps> = memo(({
         onError={() => {
           setImageErrorMap((prev) => ({ ...prev, [currentMovie.id]: true }));
         }}
-        className="absolute inset-0 w-full h-full object-cover object-center transform scale-[1.02] transition-opacity duration-700 ease-out"
-        style={{ willChange: 'opacity, transform' }}
+        className="absolute inset-0 w-full h-full object-cover object-center sm:object-[center_25%] transition-opacity duration-700 ease-out"
+        style={{ willChange: 'opacity' }}
       />
 
-      {/* 4-Stop Cinematic Vignette Blend into #060911 & Sapphire Glow */}
-      <div className="absolute inset-0 hero-vignette pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-r from-[#060911]/95 via-[#060911]/50 to-transparent w-full md:w-3/4 pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_25%_75%,rgba(23,107,255,0.24)_0%,transparent_60%)] pointer-events-none" />
+      {/* Clean Contrast Scrims (Ensures artwork stays bright & vivid while text and badges are crystal-clear) */}
+      {/* Top Navbar Scrim */}
+      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#060911]/60 to-transparent pointer-events-none" />
+
+      {/* Left Directional Scrim — only softens background behind text without muddying the artwork */}
+      <div className="absolute inset-y-0 left-0 w-full sm:w-4/5 md:w-3/5 bg-gradient-to-r from-[#060911]/90 via-[#060911]/45 to-transparent pointer-events-none" />
+
+      {/* Bottom Seamless Blend into App Background — only in bottom 35% */}
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#060911] via-[#060911]/60 to-transparent pointer-events-none" />
 
       {/* Left Navigation Arrow (Desktop/Tablet) */}
       {candidateList.length > 1 && (
@@ -223,15 +228,15 @@ export const HeroBanner: React.FC<HeroBannerProps> = memo(({
         </button>
       )}
 
-      {/* Hero Content Overlay (No badges above title as requested) */}
+      {/* Hero Content Overlay — Crystal Clear Readability */}
       <div className="relative z-10 h-full flex flex-col justify-end px-4 sm:px-8 md:px-12 pb-6 sm:pb-8 max-w-2xl lg:max-w-3xl">
         {/* Title */}
-        <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-tight line-clamp-2 drop-shadow-[0_2px_14px_rgba(0,0,0,0.85)] font-headline">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-tight line-clamp-2 drop-shadow-[0_2px_14px_rgba(0,0,0,0.9)] font-headline">
           {currentMovie.title}
         </h1>
 
-        {/* Overview */}
-        <p className="mt-2 text-xs sm:text-sm text-[#94A3B8] line-clamp-2 sm:line-clamp-3 leading-relaxed max-w-xl font-body">
+        {/* Overview — High clarity & readability */}
+        <p className="mt-2.5 text-xs sm:text-sm text-[#E2E8F0] line-clamp-2 sm:line-clamp-3 leading-relaxed max-w-xl font-body drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)]">
           {currentMovie.overview}
         </p>
 
@@ -257,7 +262,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = memo(({
             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 sm:px-6 py-3 rounded-xl bg-[#0E1726]/80 hover:bg-[#14223A] active:bg-[#0E1726] text-white font-semibold text-sm sm:text-base min-h-[48px] border border-white/15 hover:border-[#35A7FF]/40 backdrop-blur-xl transition-all active:scale-[0.97] press-feedback cursor-pointer"
           >
             <Info className="w-4 h-4 sm:w-5 sm:h-5 text-[#35A7FF]" />
-            <span>Watchlist</span>
+            <span>Details</span>
           </button>
         </div>
       </div>
