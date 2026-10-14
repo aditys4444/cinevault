@@ -41,11 +41,22 @@ interface ChannelCardProps {
   onSelect: (channel: LiveChannel) => void;
 }
 
+// Deterministic broadcast timeline calculation (based on current time + channel seed)
+const getBroadcastProgress = (id: string) => {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const seed = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 25;
+  const progressPercent = Math.min(94, Math.max(12, ((minutes + seed) % 60) / 60 * 100));
+  return Math.round(progressPercent);
+};
+
 const ChannelCard = memo(({ channel, isActive, onSelect }: ChannelCardProps) => {
+  const broadcastProgress = useMemo(() => getBroadcastProgress(channel.id), [channel.id]);
+
   return (
     <div
       onClick={() => onSelect(channel)}
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 88px' }}
       className={`group relative flex items-center gap-2.5 sm:gap-3 p-2.5 rounded-xl transition-all cursor-pointer select-none border ${
         isActive
           ? 'bg-[#176BFF]/15 border-[#35A7FF] shadow-[0_0_15px_rgba(23,107,255,0.25)]'
@@ -85,6 +96,28 @@ const ChannelCard = memo(({ channel, isActive, onSelect }: ChannelCardProps) => 
             </span>
           )}
         </div>
+
+        {/* Live Broadcast Program Track & Progress */}
+        <div className="mt-1.5 flex flex-col gap-1">
+          <div className="flex items-center justify-between text-[10px] text-[#8D9AB5] leading-none">
+            <span className="truncate max-w-[120px] sm:max-w-[150px] text-gray-400 font-medium">
+              {channel.category ? `${channel.category.toUpperCase()} Broadcast` : 'Live Transmission'}
+            </span>
+            <span className="font-mono text-[9px] text-[#35A7FF] font-semibold">
+              {broadcastProgress}%
+            </span>
+          </div>
+          <div className="w-full h-1 rounded-full bg-white/[0.08] overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                isActive
+                  ? 'bg-gradient-to-r from-[#176BFF] to-[#35A7FF] shadow-[0_0_6px_rgba(53,167,255,0.7)]'
+                  : 'bg-white/20 group-hover:bg-[#35A7FF]/60'
+              }`}
+              style={{ width: `${broadcastProgress}%` }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -115,6 +148,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
     liveTvService.syncRemoteChannels().catch(() => {});
     return unsubscribe;
   }, []);
+  const [isInPip, setIsInPip] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -237,10 +271,20 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
   // Picture in Picture helper
   const triggerPip = useCallback(async () => {
     try {
-      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.enterPipMode) {
+      setIsInPip(true);
+      setShowControls(false);
+      document.body.classList.add('in-pip-mode');
+
+      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.enterPipModeRatio && videoRef.current) {
+        const vWidth = videoRef.current.videoWidth || 16;
+        const vHeight = videoRef.current.videoHeight || 9;
+        const handled = (window as any).AndroidDevice.enterPipModeRatio(vWidth, vHeight);
+        if (handled) return;
+      } else if (typeof window !== 'undefined' && (window as any).AndroidDevice?.enterPipMode) {
         const handled = (window as any).AndroidDevice.enterPipMode();
         if (handled) return;
       }
+
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
       } else if (videoRef.current && document.pictureInPictureEnabled) {
@@ -249,11 +293,62 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
     } catch {}
   }, []);
 
-  // Ensure clean teardown and register global PiP triggers
+  // Sync Picture in Picture state & events
   useEffect(() => {
-    (window as any).__cinevaultCanAutoPip = () => isPlaying && !error;
-    (window as any).__cinevaultTriggerPip = triggerPip;
+    const video = videoRef.current;
+    const onEnterPip = () => {
+      setIsInPip(true);
+      setShowControls(false);
+      document.body.classList.add('in-pip-mode');
+    };
+    const onLeavePip = () => {
+      setIsInPip(false);
+      document.body.classList.remove('in-pip-mode');
+    };
+
+    if (video) {
+      video.addEventListener('enterpictureinpicture', onEnterPip);
+      video.addEventListener('leavepictureinpicture', onLeavePip);
+    }
+
+    const onNativePipChange = (e: any) => {
+      const inPip = Boolean(e?.detail?.inPip);
+      setIsInPip(inPip);
+      if (inPip) {
+        setShowControls(false);
+        document.body.classList.add('in-pip-mode');
+      } else {
+        document.body.classList.remove('in-pip-mode');
+      }
+    };
+    window.addEventListener('pipmodechange', onNativePipChange);
+
     return () => {
+      if (video) {
+        video.removeEventListener('enterpictureinpicture', onEnterPip);
+        video.removeEventListener('leavepictureinpicture', onLeavePip);
+      }
+      window.removeEventListener('pipmodechange', onNativePipChange);
+      document.body.classList.remove('in-pip-mode');
+    };
+  }, []);
+
+  // Ensure clean teardown and register global PiP triggers & sync native playback state
+  useEffect(() => {
+    const isPlayingNow = isPlaying && !error;
+    const vWidth = videoRef.current?.videoWidth || 16;
+    const vHeight = videoRef.current?.videoHeight || 9;
+
+    if (typeof window !== 'undefined' && (window as any).AndroidDevice?.setVideoPlaybackActive) {
+      (window as any).AndroidDevice.setVideoPlaybackActive(isPlayingNow, vWidth, vHeight);
+    }
+    (window as any).__cinevaultCanAutoPip = () => isPlayingNow;
+    (window as any).__cinevaultTriggerPip = triggerPip;
+
+    return () => {
+      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.setVideoPlaybackActive) {
+        (window as any).AndroidDevice.setVideoPlaybackActive(false, 16, 9);
+      }
       delete (window as any).__cinevaultCanAutoPip;
       delete (window as any).__cinevaultTriggerPip;
       exitLandscape();
@@ -281,6 +376,10 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
 
   // Controls auto-hide timer (Auto-hides after 3.5s when playing)
   const triggerShowControls = useCallback(() => {
+    if (isInPip) {
+      setShowControls(false);
+      return;
+    }
     setShowControls(true);
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     controlsTimerRef.current = setTimeout(() => {
@@ -288,7 +387,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
         setShowControls(false);
       }
     }, 3500);
-  }, []);
+  }, [isInPip]);
 
   // Safe Autoplay function with muted fallback
   const startAutoplay = useCallback(async (video: HTMLVideoElement) => {
@@ -342,18 +441,21 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
         lowLatencyMode: true,
         startFragPrefetch: true,
         liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: 5,
-        backBufferLength: 10,
-        maxBufferSize: 15 * 1000 * 1000,
-        maxBufferLength: 10,
-        maxMaxBufferLength: 20,
-        maxBufferHole: 0.5,
-        manifestLoadingTimeOut: 10000,
-        manifestLoadingMaxRetry: 3,
-        levelLoadingTimeOut: 10000,
-        levelLoadingMaxRetry: 3,
-        fragLoadingTimeOut: 15000,
-        fragLoadingMaxRetry: 4,
+        liveMaxLatencyDurationCount: 8,
+        backBufferLength: 15,
+        maxBufferSize: 30 * 1000 * 1000,
+        maxBufferLength: 25,
+        maxMaxBufferLength: 45,
+        maxBufferHole: 0.8,
+        highBufferWatchdogPeriod: 2,
+        manifestLoadingTimeOut: 12000,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingTimeOut: 12000,
+        levelLoadingMaxRetry: 4,
+        fragLoadingTimeOut: 20000,
+        fragLoadingMaxRetry: 5,
+        nudgeOffset: 0.2,
+        nudgeMaxRetry: 5,
       });
       hlsRef.current = hls;
 
@@ -430,6 +532,13 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      if (video) {
+        try {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        } catch {}
+      }
     };
   }, [activeChannel, reloadKey, startAutoplay]);
 
@@ -505,6 +614,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
 
   // Background Surface Click (Toggles controls visibility ONLY — NEVER pauses playback)
   const handleSurfaceClick = (e: React.MouseEvent) => {
+    if (isInPip) return;
     if ((e.target as HTMLElement).closest('button, input, [role="button"], a, select')) {
       return;
     }
@@ -550,9 +660,9 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
   };
 
   return (
-    <div className="min-h-screen bg-[#050A18] text-[#F5F7FF] pb-24 md:pb-12">
-      {/* Top Header & Search Bar (Only shown in portrait mode) */}
-      {!isFullscreen && (
+    <div className={`min-h-screen bg-[#050A18] text-[#F5F7FF] ${isInPip ? '!p-0 !m-0 !bg-black' : 'pb-24 md:pb-12'}`}>
+      {/* Top Header & Search Bar (Only shown in portrait mode when NOT in PiP) */}
+      {!isFullscreen && !isInPip && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
             <div className="flex items-center gap-2">
@@ -615,14 +725,16 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
       )}
 
       {/* Main Content Layout: Live Player + Channel Grid */}
-      <div className={isFullscreen ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2'}>
-        <div className="flex flex-col gap-3">
-          {/* Live Player Container (Full hardware landscape when fullscreen, aspect-video in portrait) */}
+      <div className={isFullscreen ? '' : isInPip ? '!p-0 !m-0' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2'}>
+        <div className={`flex flex-col ${isInPip ? 'gap-0' : 'gap-3'}`}>
+          {/* Live Player Container (Full hardware landscape when fullscreen, aspect-video in portrait, pip-video-container in PiP) */}
           <div
             ref={playerContainerRef}
             onClick={handleSurfaceClick}
             className={
-              isFullscreen
+              isInPip
+                ? 'pip-video-container fixed inset-0 z-[9999999] w-screen h-screen bg-black overflow-hidden'
+                : isFullscreen
                 ? 'player-fullscreen-mode fixed inset-0 z-[9999] w-screen h-[100dvh] bg-black flex items-center justify-center select-none overflow-hidden touch-none'
                 : 'relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/[0.08] select-none group'
             }
@@ -633,7 +745,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
               playsInline
               autoPlay
               muted={isMuted}
-              className="w-full h-full object-contain bg-black"
+              className={`w-full h-full object-contain bg-black ${isInPip ? 'pip-video-element' : ''}`}
               onWaiting={handleVideoWaiting}
               onPlaying={handleVideoPlaying}
               onPause={handleVideoPause}
@@ -641,7 +753,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
             />
 
             {/* Tap to Unmute Audio Banner */}
-            {needsUnmute && !isLoading && (
+            {!isInPip && needsUnmute && !isLoading && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -656,7 +768,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
             )}
 
             {/* Simple Loading Spinner */}
-            {isLoading && !error && (
+            {!isInPip && isLoading && !error && (
               <div className="absolute inset-0 z-20 bg-black/50 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 pointer-events-none">
                 <Loader2 className="w-9 h-9 text-[#35A7FF] animate-spin" />
                 <span className="text-xs font-medium text-[#F5F7FF]">
@@ -666,7 +778,7 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
             )}
 
             {/* Error Notice */}
-            {error && (
+            {!isInPip && error && (
               <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center gap-3">
                 <div className="flex flex-col items-center gap-2.5 p-5 max-w-sm bg-[#0B1224] rounded-2xl border border-white/[0.08] shadow-2xl">
                   <AlertCircle className="w-8 h-8 text-red-400" />
@@ -695,11 +807,12 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
             )}
 
             {/* NEW SIMPLE VIDEO PLAYER LAYER */}
-            <div
-              className={`absolute inset-0 z-30 flex flex-col justify-between p-3 sm:p-5 bg-gradient-to-b from-black/85 via-transparent to-black/85 transition-opacity duration-200 ${
-                showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-              }`}
-            >
+            {!isInPip && (
+              <div
+                className={`pip-controls-hide pip-control-overlay absolute inset-0 z-30 flex flex-col justify-between p-3 sm:p-5 bg-gradient-to-b from-black/85 via-transparent to-black/85 transition-opacity duration-200 ${
+                  showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
               {/* TOP BAR: Channel identity, live indicator & quality */}
               <div
                 className="flex items-center justify-between gap-3 pointer-events-auto"
@@ -877,10 +990,11 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
                 </div>
               </div>
             </div>
+            )}
           </div>
 
-          {/* Active Channel Info Strip (Portrait only) */}
-          {!isFullscreen && (
+          {/* Active Channel Info Strip (Portrait only when NOT in PiP) */}
+          {!isFullscreen && !isInPip && (
             <div className="bg-[#0E172B] border border-white/[0.08] rounded-xl p-3 flex items-center justify-between shadow-[0_4px_16px_rgba(5,10,24,0.6)]">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-[#050A18] border border-white/[0.08] p-1 flex items-center justify-center overflow-hidden shrink-0">
@@ -917,8 +1031,8 @@ export const LiveTvView: React.FC<LiveTvViewProps> = memo(() => {
             </div>
           )}
 
-          {/* Channel Guide Grid Section (Portrait only) */}
-          {!isFullscreen && (
+          {/* Channel Guide Grid Section (Portrait only when NOT in PiP) */}
+          {!isFullscreen && !isInPip && (
             <div className="mt-2">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-[#F5F7FF]">

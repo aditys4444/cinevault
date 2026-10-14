@@ -13,6 +13,7 @@ import {
   Film,
   RefreshCw,
   ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 import { APP_VERSION, OFFICIAL_WEBSITE_URL, OFFICIAL_TELEGRAM_URL } from '../config/version';
 import { updateService, type UpdateInfo } from '../services/updateService';
@@ -33,12 +34,14 @@ interface ProfileViewProps {
   onRemoveFromWatchlist: (movie: Movie) => void;
   onNavigateHome: () => void;
   onShowUpdateModal?: (info: UpdateInfo) => void;
+  isFamilyMode?: boolean;
+  onToggleFamilyMode?: (enabled: boolean) => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = memo(({
   watchlist,
   profile = {
-    name: 'Julian Vance',
+    name: 'User',
     title: 'CineVault Member',
     memberId: '#CV-88292',
     sinceYear: '2024',
@@ -49,8 +52,26 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({
   onRemoveFromWatchlist,
   onNavigateHome,
   onShowUpdateModal,
+  isFamilyMode,
+  onToggleFamilyMode,
 }) => {
   const [activeTab, setActiveTab] = useState<'watchlist' | 'settings'>('watchlist');
+
+  // Family Mode State (persisted & synced with App state)
+  const [familyMode, setFamilyMode] = useState<boolean>(() => {
+    if (typeof isFamilyMode === 'boolean') return isFamilyMode;
+    try {
+      return localStorage.getItem('cinevault_family_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof isFamilyMode === 'boolean') {
+      setFamilyMode(isFamilyMode);
+    }
+  }, [isFamilyMode]);
 
   // Profile editing
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -84,7 +105,7 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({
 
   const handleSaveProfile = useCallback(() => {
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
-    const trimmed = editName.trim() || 'CineVault User';
+    const trimmed = editName.trim() || 'User';
     onUpdateProfile?.({
       ...profile,
       name: trimmed,
@@ -92,6 +113,17 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({
     setIsEditing(false);
     showToast('Profile updated');
   }, [editName, profile, onUpdateProfile, showToast]);
+
+  const handleFamilyModeToggle = useCallback(() => {
+    queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(12); });
+    const next = !familyMode;
+    setFamilyMode(next);
+    try {
+      localStorage.setItem('cinevault_family_mode', String(next));
+    } catch {}
+    onToggleFamilyMode?.(next);
+    showToast(next ? 'Family Mode Enabled • 18+ content locked' : 'Family Mode Disabled');
+  }, [familyMode, onToggleFamilyMode, showToast]);
 
   // Real offline downloads count and storage calculation
   const downloadStats = useMemo(() => {
@@ -116,8 +148,8 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({
 
   const getInitials = (name: string) => {
     const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return 'CV';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    if (parts.length === 0) return 'U';
+    if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
@@ -432,6 +464,69 @@ export const ProfileView: React.FC<ProfileViewProps> = memo(({
       {/* TAB 2: SETTINGS */}
       {activeTab === 'settings' && (
         <div className="space-y-4 animate-fade-in">
+          {/* Family Mode & Parental Safety Card */}
+          <div className="bg-[#0E172B] border border-white/[0.08] rounded-2xl p-4 sm:p-5 space-y-4 shadow-[0_4px_16px_rgba(5,10,24,0.6)] relative overflow-hidden">
+            {familyMode && (
+              <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+            )}
+            
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#F5F7FF]">
+                <ShieldCheck className={`w-4 h-4 ${familyMode ? 'text-emerald-400' : 'text-[#35A7FF]'}`} />
+                <span>Parental Safety & Family Mode</span>
+              </div>
+              <span
+                className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border transition-colors ${
+                  familyMode
+                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                    : 'bg-white/5 text-[#8D9AB5] border-white/10'
+                }`}
+              >
+                {familyMode ? 'PROTECTED' : 'STANDARD'}
+              </span>
+            </div>
+
+            {/* Toggle Row */}
+            <div className="flex items-center justify-between py-1">
+              <div className="pr-3">
+                <div className="text-xs sm:text-sm font-semibold text-[#F5F7FF] flex items-center gap-1.5">
+                  <span>Family Mode</span>
+                  {familyMode && (
+                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                      SAFE SEARCH ACTIVE
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-[#8D9AB5] mt-0.5 leading-relaxed">
+                  Blocks all 18+ adult content, locks secret vault, and strictly filters adult suggestions & search results.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleFamilyModeToggle}
+                className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                  familyMode
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_12px_rgba(16,185,129,0.5)]'
+                    : 'bg-[#16223D]'
+                }`}
+                aria-label="Toggle Family Mode"
+              >
+                <div
+                  className={`w-5 h-5 rounded-full bg-white shadow-md absolute top-0.5 transition-transform ${
+                    familyMode ? 'left-6' : 'left-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {familyMode && (
+              <div className="pt-2 border-t border-white/[0.06] flex items-center gap-2 text-[11px] text-emerald-400/90 animate-fade-in">
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>CineVault is in safe browsing mode. All explicit terms and 18+ items are hidden.</span>
+              </div>
+            )}
+          </div>
+
           {/* Download & Storage Settings */}
           <div className="bg-[#0E172B] border border-white/[0.08] rounded-2xl p-4 sm:p-5 space-y-4 shadow-[0_4px_16px_rgba(5,10,24,0.6)]">
             <div className="flex items-center gap-2 text-sm font-bold text-[#F5F7FF]">

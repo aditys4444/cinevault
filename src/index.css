@@ -283,6 +283,88 @@ body::-webkit-scrollbar,
   }
 }
 
+@keyframes rippleExpandLeft {
+  0% {
+    opacity: 0;
+    transform: scale(0.65) translateX(-25%);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18) translateX(8%);
+  }
+}
+
+@keyframes rippleExpandRight {
+  0% {
+    opacity: 0;
+    transform: scale(0.65) translateX(25%);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18) translateX(-8%);
+  }
+}
+
+@keyframes shineGleam {
+  0% {
+    transform: translateX(-100%) translateY(-100%) rotate(25deg);
+  }
+  100% {
+    transform: translateX(100%) translateY(100%) rotate(25deg);
+  }
+}
+
+/* Double-Tap Skip Arc Classes */
+.animate-ripple-left {
+  animation: rippleExpandLeft 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-ripple-right {
+  animation: rippleExpandRight 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Luminous Card Border Hover Reflection */
+.cinevault-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.cinevault-shine::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 40%,
+    rgba(53, 167, 255, 0.12) 48%,
+    rgba(255, 255, 255, 0.22) 50%,
+    rgba(53, 167, 255, 0.12) 52%,
+    transparent 60%
+  );
+  transform: translateX(-100%) translateY(-100%) rotate(25deg);
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cinevault-shine:hover::before,
+.cinevault-shine:focus-visible::before {
+  opacity: 1;
+  animation: shineGleam 0.75s ease forwards;
+}
+
 /* Utility Animation Classes */
 .animate-fade-in {
   animation: fadeIn 0.16s var(--ease-out-expo) forwards;
@@ -606,6 +688,65 @@ button, [role="button"], a {
 
 .glow-pill {
   box-shadow: 0 0 14px rgba(23, 107, 255, 0.6);
+}
+
+/* ============================================================
+   PICTURE-IN-PICTURE (PiP) MODE: 100% PURE VIDEO VIEWPORT
+   Ensures ONLY the video contents are visible inside the PiP window.
+   Completely suppresses all navigation, headers, footers, control overlays,
+   dialogs, drawers, and background page contents.
+   ============================================================ */
+body.in-pip-mode {
+  background-color: #000000 !important;
+  overflow: hidden !important;
+}
+
+body.in-pip-mode nav,
+body.in-pip-mode header,
+body.in-pip-mode footer,
+body.in-pip-mode main:not(.pip-active-main),
+body.in-pip-mode .bottom-nav-container,
+body.in-pip-mode [data-pip-hide="true"],
+body.in-pip-mode .pip-hide {
+  display: none !important;
+}
+
+body.in-pip-mode .pip-video-container {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999999 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: #000000 !important;
+  overflow: hidden !important;
+}
+
+body.in-pip-mode .pip-video-element {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: #000000 !important;
+}
+
+body.in-pip-mode .pip-control-overlay,
+body.in-pip-mode .pip-controls-hide {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* NOTE: scroll-snap-x already defined above (line ~383) — removed duplicate */

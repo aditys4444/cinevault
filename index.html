@@ -12,6 +12,39 @@
     <title>CineVault — Curated Luxury Streaming</title>
     <meta name="description" content="CineVault - Curated luxury streaming for movies and TV shows." />
     
+    <!-- Early Instant App Update Check (0ms cold-start latency) -->
+    <script>
+      (function() {
+        try {
+          var endpoints = [
+            'https://www.cinevaultapk.online/version.json?t=' + Date.now(),
+            'https://cinevault-web.pages.dev/version.json?t=' + Date.now()
+          ];
+          window.__CINEVAULT_EARLY_UPDATE_PROMISE = Promise.any(endpoints.map(function(url) {
+            return fetch(url, {
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+              cache: 'no-store'
+            }).then(function(res) {
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              return res.json();
+            });
+          })).then(function(data) {
+            window.__CINEVAULT_EARLY_UPDATE_DATA = data;
+            if (data) {
+              var code = Number(data.latestVersionCode || data.versionCode) || 0;
+              if (code > 2900) {
+                try {
+                  localStorage.setItem('cinevault_pending_update', JSON.stringify(data));
+                } catch(e) {}
+              }
+            }
+            return data;
+          }).catch(function() { return null; });
+        } catch(e) {}
+      })();
+    </script>
+
     <!-- VIP MOD: Anti-Ad, Popup & Anti-Inspection Shield -->
     <script>
       (function() {

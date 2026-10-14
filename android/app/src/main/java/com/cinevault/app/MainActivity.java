@@ -54,6 +54,9 @@ public class MainActivity extends BridgeActivity {
     private static Context appContext;
     private long lastBackPressTime = 0;
     private boolean isImmersiveLandscape = false;
+    private volatile boolean isVideoPlaybackActive = false;
+    private volatile int currentVideoWidth = 16;
+    private volatile int currentVideoHeight = 9;
 
     private static String cachedToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjc0MDk3NDg3NjU0NTg3MTg4NDgsImF0cCI6MywiZXh0IjoiMTc5MDY5MTgwOCIsImV4cCI6MTc5ODQ2NzgwOCwiaWF0IjoxNzkwNjkxNTA4fQ.wYD3dZn6Luu6rVpEbGJ6GyFctbFvjrfp9m25BUcODao";
     private static String cachedXUser = "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjc0MDk3NDg3NjU0NTg3MTg4NDgsImF0cCI6MywiZXh0IjoiMTc5MDY5MTgwOCIsImV4cCI6MTc5ODQ2NzgwOCwiaWF0IjoxNzkwNjkxNTA4fQ.wYD3dZn6Luu6rVpEbGJ6GyFctbFvjrfp9m25BUcODao\",\"userId\":\"7409748765458718848\",\"userType\":0,\"appType\":3}";
@@ -1377,6 +1380,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        androidx.core.splashscreen.SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
         appContext = getApplicationContext();
         ensureLocalProxyServer();
@@ -1428,6 +1432,12 @@ public class MainActivity extends BridgeActivity {
                         long currentTime = System.currentTimeMillis();
                         if (currentTime - lastBackPressTime < 2000) {
                             try {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    android.app.PictureInPictureParams.Builder pipBuilder =
+                                        new android.app.PictureInPictureParams.Builder();
+                                    pipBuilder.setAutoEnterEnabled(false);
+                                    setPictureInPictureParams(pipBuilder.build());
+                                }
                                 setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER);
                             } catch (Exception ignored) {}
                             finish();
@@ -1467,6 +1477,8 @@ public class MainActivity extends BridgeActivity {
                 // High Performance & Disk Caching: Conserve mobile data, maximize rendering speed
                 settings.setCacheMode(WebSettings.LOAD_DEFAULT);
                 settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
+                webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
+                webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     settings.setSafeBrowsingEnabled(false);
                 }
@@ -2292,28 +2304,41 @@ public class MainActivity extends BridgeActivity {
                     }
 
                     @JavascriptInterface
-                    public boolean enterPipMode() {
-                        try {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                runOnUiThread(() -> {
-                                    try {
-                                        android.app.PictureInPictureParams.Builder pipBuilder =
-                                            new android.app.PictureInPictureParams.Builder();
-                                        android.util.Rational aspectRatio = new android.util.Rational(16, 9);
-                                        pipBuilder.setAspectRatio(aspectRatio);
-                                        enterPictureInPictureMode(pipBuilder.build());
-                                    } catch (Exception e) {
-                                        try {
-                                            enterPictureInPictureMode();
-                                        } catch (Exception ignored) {}
-                                    }
-                                });
-                                return true;
-                            }
-                            return false;
-                        } catch (Exception e) {
-                            return false;
+                    public void setVideoPlaybackActive(boolean active, int width, int height) {
+                        isVideoPlaybackActive = active;
+                        if (width > 0 && height > 0) {
+                            currentVideoWidth = width;
+                            currentVideoHeight = height;
                         }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            runOnUiThread(() -> {
+                                try {
+                                    android.app.PictureInPictureParams.Builder pipBuilder =
+                                        new android.app.PictureInPictureParams.Builder();
+                                    pipBuilder.setAutoEnterEnabled(active);
+                                    pipBuilder.setSeamlessResizeEnabled(true);
+                                    if (active) {
+                                        int w = currentVideoWidth;
+                                        int h = currentVideoHeight;
+                                        double ratio = (double) w / (double) h;
+                                        if (ratio < 0.41841) { w = 100; h = 239; }
+                                        else if (ratio > 2.39) { w = 239; h = 100; }
+                                        pipBuilder.setAspectRatio(new android.util.Rational(w, h));
+                                    }
+                                    setPictureInPictureParams(pipBuilder.build());
+                                } catch (Exception ignored) {}
+                            });
+                        }
+                    }
+
+                    @JavascriptInterface
+                    public boolean enterPipMode() {
+                        return MainActivity.this.enterPipModeRatio(currentVideoWidth, currentVideoHeight);
+                    }
+
+                    @JavascriptInterface
+                    public boolean enterPipModeRatio(int width, int height) {
+                        return MainActivity.this.enterPipModeRatio(width, height);
                     }
 
                     @JavascriptInterface
@@ -2495,15 +2520,64 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    public boolean enterPipModeRatio(int width, int height) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                runOnUiThread(() -> {
+                    try {
+                        android.app.PictureInPictureParams.Builder pipBuilder =
+                            new android.app.PictureInPictureParams.Builder();
+                        int w = width > 0 ? width : currentVideoWidth;
+                        int h = height > 0 ? height : currentVideoHeight;
+                        double ratio = (double) w / (double) h;
+                        if (ratio < 0.41841) {
+                            w = 100; h = 239;
+                        } else if (ratio > 2.39) {
+                            w = 239; h = 100;
+                        }
+                        android.util.Rational aspectRatio = new android.util.Rational(w, h);
+                        pipBuilder.setAspectRatio(aspectRatio);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            pipBuilder.setAutoEnterEnabled(isVideoPlaybackActive);
+                            pipBuilder.setSeamlessResizeEnabled(true);
+                        }
+                        enterPictureInPictureMode(pipBuilder.build());
+                    } catch (Exception e) {
+                        try {
+                            enterPictureInPictureMode();
+                        } catch (Exception ignored) {}
+                    }
+                });
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         try {
-            if (bridge != null && bridge.getWebView() != null) {
-                bridge.getWebView().evaluateJavascript(
-                    "window.dispatchEvent(new CustomEvent('pipmodechange', { detail: { inPip: " + isInPictureInPictureMode + " } }));",
-                    null
-                );
+            if (!isInPictureInPictureMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                try {
+                    android.app.PictureInPictureParams.Builder pipBuilder =
+                        new android.app.PictureInPictureParams.Builder();
+                    pipBuilder.setAutoEnterEnabled(isVideoPlaybackActive);
+                    setPictureInPictureParams(pipBuilder.build());
+                } catch (Exception ignored) {}
+            }
+            WebView webView = getBridge() != null ? getBridge().getWebView() : (bridge != null ? bridge.getWebView() : null);
+            if (webView != null) {
+                webView.post(() -> {
+                    try {
+                        webView.evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('pipmodechange', { detail: { inPip: " + isInPictureInPictureMode + " } }));",
+                            null
+                        );
+                    } catch (Exception ignored) {}
+                });
             }
         } catch (Exception ignored) {}
     }
@@ -2511,12 +2585,41 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onUserLeaveHint() {
         super.onUserLeaveHint();
+        // STRICT: Never enter PiP if video playback is not active
+        if (!isVideoPlaybackActive) {
+            return;
+        }
         try {
-            if (bridge != null && bridge.getWebView() != null) {
-                bridge.getWebView().evaluateJavascript(
-                    "if (window.__cinevaultCanAutoPip && window.__cinevaultCanAutoPip()) { window.__cinevaultTriggerPip && window.__cinevaultTriggerPip(); }",
-                    null
-                );
+            // For Android 8 to 11 (where setAutoEnterEnabled is not available)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                enterPipModeRatio(currentVideoWidth, currentVideoHeight);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        try {
+            WebView webView = getBridge() != null ? getBridge().getWebView() : (bridge != null ? bridge.getWebView() : null);
+            if (webView != null && level >= TRIM_MEMORY_MODERATE) {
+                // Evict RAM texture cache and stale redirects while preserving disk storage
+                webView.clearCache(false);
+                REDIRECT_CACHE.clear();
+                System.gc();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        try {
+            WebView webView = getBridge() != null ? getBridge().getWebView() : (bridge != null ? bridge.getWebView() : null);
+            if (webView != null) {
+                webView.clearCache(false);
+                REDIRECT_CACHE.clear();
+                System.gc();
             }
         } catch (Exception ignored) {}
     }

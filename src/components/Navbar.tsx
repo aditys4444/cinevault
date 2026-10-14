@@ -9,25 +9,37 @@ interface NavbarProps {
   userName?: string;
   userInitials?: string;
   isAdultMode?: boolean;
+  isFamilyMode?: boolean;
   onToggleAdultMode?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = memo(({
   activeView,
   onNavigate,
-  userName = 'Julian Vance',
-  userInitials = 'JV',
+  userName = 'User',
+  userInitials = 'U',
   isAdultMode = false,
+  isFamilyMode = false,
   onToggleAdultMode,
 }) => {
   const handleLogoClick = useCallback(() => {
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
-    if (onToggleAdultMode) {
-      onToggleAdultMode();
-    } else {
+    if (isFamilyMode) {
       onNavigate('home');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
     }
-  }, [onToggleAdultMode, onNavigate]);
+    if (isAdultMode) {
+      onToggleAdultMode?.();
+    } else {
+      if (activeView === 'home') {
+        onToggleAdultMode?.();
+      } else {
+        onNavigate('home');
+      }
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [isFamilyMode, isAdultMode, onToggleAdultMode, activeView, onNavigate]);
 
   const handleTelegramClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
@@ -64,7 +76,13 @@ export const Navbar: React.FC<NavbarProps> = memo(({
             if (e.key === 'Enter') handleLogoClick();
           }}
           className="h-10 sm:h-12 max-w-[180px] sm:max-w-[220px] flex items-center gap-2 cursor-pointer select-none focus:outline-none transition-transform active:scale-95 group"
-          title={isAdultMode ? "18+ Mode Active - Click to return to Standard CineVault" : "Click logo to enter 18+ Content"}
+          title={
+            isFamilyMode
+              ? "Family Safe Mode Active"
+              : isAdultMode
+              ? "18+ Mode Active - Click to return to Standard CineVault"
+              : "Click logo to enter 18+ Content"
+          }
         >
           {isAdultMode ? (
             <div className="flex items-center gap-2 animate-fade-in">

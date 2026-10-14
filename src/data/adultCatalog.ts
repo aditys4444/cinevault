@@ -2466,6 +2466,41 @@ _adultIds = _collectAdultIds();
 
 export const ADULT_CONTENT_IDS: Set<string> = _adultIds;
 
+// Pre-built Set of ALL adult titles and variations for instant search suggestion filtering
+let _adultTitles = new Set<string>();
+
+const _collectAdultTitles = (): Set<string> => {
+  const titles = new Set<string>();
+  const addTitle = (rawTitle?: string) => {
+    if (!rawTitle) return;
+    const clean = rawTitle.toLowerCase().trim();
+    if (!clean) return;
+    // Skip row titles that start with emoji headers
+    if (clean.startsWith('🔥') || clean.startsWith('🎬') || clean.startsWith('🌶️') || clean.startsWith('🔞')) return;
+    titles.add(clean);
+    // Remove bracketed info e.g. [Hindi], [Unrated Cut], (Complete Uncensored)
+    const unbracketed = clean.replace(/\[.*?\]|\(.*?\)/g, '').trim();
+    if (unbracketed && unbracketed !== clean) titles.add(unbracketed);
+    // Remove season tags e.g. S1, S2, S1-S7
+    const unseasoned = unbracketed.replace(/\bs\d+(-s\d+)?\b/gi, '').trim();
+    if (unseasoned && unseasoned !== unbracketed) titles.add(unseasoned);
+  };
+
+  if (ADULT_HOME_CATALOG.featured?.title) {
+    addTitle(ADULT_HOME_CATALOG.featured.title);
+  }
+  for (const row of ADULT_HOME_CATALOG.rows || []) {
+    for (const item of row.items || []) {
+      addTitle(item.title);
+    }
+  }
+  return titles;
+};
+
+_adultTitles = _collectAdultTitles();
+
+export const ADULT_TITLES_SET: Set<string> = _adultTitles;
+
 export const syncRemoteAdultCatalog = async (): Promise<HomeCatalogResponse> => {
   for (const endpoint of ADULT_ENDPOINTS) {
     try {
@@ -2479,6 +2514,7 @@ export const syncRemoteAdultCatalog = async (): Promise<HomeCatalogResponse> => 
         if (data && Array.isArray(data.rows) && data.rows.length > 0) {
           ADULT_HOME_CATALOG = data;
           _adultIds = _collectAdultIds();
+          _adultTitles = _collectAdultTitles();
           try {
             if (typeof window !== 'undefined' && window.localStorage) {
               localStorage.setItem(REMOTE_ADULT_KEY, JSON.stringify(data));
@@ -2509,10 +2545,13 @@ export const ADULT_KEYWORDS: string[] = [
   'adult',
   'erotic',
   'erotica',
+  'eroticism',
+  'erotique',
   'porn',
   'porno',
   'pornography',
   'xxx',
+  'xxxx',
   'hentai',
   'uncensored',
   'uncut',
@@ -2530,11 +2569,14 @@ export const ADULT_KEYWORDS: string[] = [
   'voovi',
   'cineprime',
   'rabbit',
+  'rabbit movies',
   'fliz',
+  'flizmovies',
   'charmsukh',
   'palang tod',
   'kavita bhabhi',
   'gandii baat',
+  'gandi baat',
   'mastram',
   'riti riwaj',
   'jane anjane mein',
@@ -2558,54 +2600,239 @@ export const ADULT_KEYWORDS: string[] = [
   'hotshots',
   'kamakhya',
   'antarvasna',
+  'desipapa',
+  'kamwali',
+  'kamwali bai',
+  'chudai',
+  'suhagraat',
+  'devar bhabhi',
+  'jija saali',
+  'threesome',
+  'foursome',
+  'gangbang',
+  'milf',
+  'stepmom',
+  'stepsister',
+  'stepdaughter',
+  'voyeur',
+  'voyeurism',
+  'stripper',
+  'striptease',
+  'strip club',
+  'escort',
+  'playboy',
+  'penthouse',
+  'red light',
+  'adult video',
+  'adult web series',
+  'hot video',
+  'hot web series',
+  'hot scenes',
+  'uncensored scene',
+  '18+ series',
+  '18+ web series',
+  'adult movie',
+  'bold scene',
+  'bold movie',
+  'bold web series',
+  'mature 18+',
+  'erotic thriller',
+  'erotic movie',
+  'erotic series',
+  'erotic drama',
+  'soft porn',
+  'hard porn',
+  'blue film',
+  'bf video',
+  'desiporn',
+  'xhamster',
+  'xvideos',
+  'xnxx',
+  'pornhub',
+  'brazzers',
+  'kendra lust',
+  'mia khalifa',
+  'sunny leone',
+  'dani daniels',
+  'eva elfie',
+  'angela white',
+  'riley reid',
+  'anita blonde',
+  'torbe',
+  'adult content',
+  'intimate scene',
+  'babygirl',
+  'the idol',
+  'dark desire',
+  'too hot to handle',
+  'wild things',
+  'the voyeurs',
+  'altt',
+  'altbalaji',
+  'moodx',
+  'bigshots',
+  'boomx',
+  'hunters',
+  'hitprime',
+  'gupchup',
+  'neonx',
+  'besharams',
+  'balloon',
+  'showx',
+  'fenix',
+  'hotmasti',
+  'cliff',
+  'mangoflix',
+  'hulchul',
+  'redprime',
+  'chikooflix',
+  'primeplay',
+  'feneo',
+  'bepannah',
+  'rangmanch',
+  'cine7',
+  'tadka',
+  'jalva',
+  'desiflix',
+  'nuefliks',
+  'siskiyaan',
+  'siskiyan',
+  'damaad ji',
+  'zaroorat',
+  'chawl house',
+  'tandoor',
+  'doraha',
+  'surkhiyan',
+  'dunali',
+  'mona home delivery',
+  'woodpecker',
+  'call center',
+  'prabha ki diary',
+  'kasak',
+  'halala',
+  'size matters',
+  'tadap',
+  'panchali',
+  'jalebi bai',
+  'malkin',
+  'tution teacher',
+  'lady finger',
+  'bikau',
+  'garam masala',
+  'tauba tauba',
+  'samne wali khidki',
+  'choodiwala',
+  'raja ka baja',
+  'love guru',
+  'sursuri-li',
+  'dil-do',
+  'farebi yaar',
+  'shahad',
+  'teekhi chutney',
+  'imli',
+  'kangan',
+  'walkman',
+  'manmaniyan',
+  'tawaif',
+  'shadyantra',
+  'aamras',
+  'anari kand',
+  'bidaai',
+  'kaamwali bai',
+  'naughty nurse',
+  'suhaag raat',
+  'woh teacher',
+  'sunita bhabhi',
+  'golden hole',
+  'atm bhabhi',
+  'jhol jhal',
+  'savita bhabhi',
+  'indori ishq',
+  'online ishq',
+  'betaab ishq',
 ];
 
 /**
- * Returns true if a search suggestion contains any pornography, 18+, or adult keyword.
- * Used on the standard (first) page so pornography suggestions are 100% hidden.
+ * Returns true if a search query or suggestion contains any pornography, 18+,
+ * adult studio name, adult web series, or curated adult title.
+ * Used to ensure 100% clean search suggestions and results when adult mode is off or Family Mode is on.
  */
 export function isAdultSearchTerm(term: string): boolean {
   if (!term) return false;
   const lower = term.toLowerCase().trim();
+  if (!lower) return false;
+
+  // 1. Direct or substring match against all known adult catalog titles
+  if (_adultTitles.has(lower)) return true;
+  for (const t of _adultTitles) {
+    if (t.length >= 4) {
+      if (lower === t) return true;
+      if (lower.includes(t)) return true;
+      if (lower.length >= 5 && t.includes(lower)) return true;
+    }
+  }
+
+  // 2. Keyword and studio matching
   for (const kw of ADULT_KEYWORDS) {
     if (lower === kw) return true;
     if (kw.includes(' ') && lower.includes(kw)) return true;
     if (kw.length >= 3 && lower.includes(kw)) return true;
   }
+
+  // 3. Explicit adult regex patterns
+  if (/\b(18\s*\+|adult|erotic|porn|xxx|hentai|uncensored|softcore|hardcore|nudity|nude)\b/i.test(lower)) {
+    return true;
+  }
+
   return false;
 }
 
 /**
  * Returns true if a movie should be considered 18+/adult content.
- * Checks ID match, genre tags, title keywords, and overview terms.
+ * Checks ID match, catalog title match, genre tags, title keywords, and overview terms.
  */
-export function isAdultContent(movie: { id?: string; title?: string; genres?: string[]; overview?: string }): boolean {
+export function isAdultContent(movie: { id?: string; title?: string; genres?: string[]; overview?: string; detailPath?: string }): boolean {
   if (!movie) return false;
 
   // 1. Direct ID match against curated adult catalog
   if (movie.id && ADULT_CONTENT_IDS.has(String(movie.id))) return true;
 
-  // 2. Genre-based detection
+  // 2. Direct or substring match against known adult titles & keywords
+  if (movie.title) {
+    const titleLower = movie.title.toLowerCase().trim();
+    if (_adultTitles.has(titleLower) || isAdultSearchTerm(movie.title)) {
+      return true;
+    }
+  }
+
+  // 3. Genre-based detection
   if (movie.genres && movie.genres.length > 0) {
     for (const genre of movie.genres) {
       const g = genre.toLowerCase();
+      if (isAdultSearchTerm(g)) return true;
       for (const keyword of ADULT_KEYWORDS) {
         if (g === keyword || g.includes(keyword)) return true;
       }
     }
   }
 
-  // 3. Title-based adult keyword detection (prevents API leakage of un-tagged 18+ titles)
-  if (movie.title) {
-    const titleLower = movie.title.toLowerCase();
-    for (const keyword of ADULT_KEYWORDS) {
-      if (keyword.length >= 3 && titleLower.includes(keyword)) {
-        return true;
-      }
+  // 4. DetailPath detection (common for adult studio detail paths)
+  if (movie.detailPath) {
+    const dpLower = movie.detailPath.toLowerCase();
+    if (
+      dpLower.includes('ullu') ||
+      dpLower.includes('kooku') ||
+      dpLower.includes('primeshots') ||
+      dpLower.includes('voovi') ||
+      dpLower.includes('cineprime') ||
+      dpLower.includes('18plus') ||
+      dpLower.includes('adult-')
+    ) {
+      return true;
     }
   }
 
-  // 4. Overview/Synopsis explicit indicator detection
+  // 5. Overview/Synopsis explicit indicator detection
   if (movie.overview) {
     const ovLower = movie.overview.toLowerCase();
     if (
@@ -2614,7 +2841,8 @@ export function isAdultContent(movie: { id?: string; title?: string; genres?: st
       ovLower.includes('18+ adult drama') ||
       ovLower.includes('erotic drama') ||
       ovLower.includes('hentai') ||
-      ovLower.includes('softcore')
+      ovLower.includes('softcore') ||
+      ovLower.includes('nudity')
     ) {
       return true;
     }
@@ -2622,3 +2850,4 @@ export function isAdultContent(movie: { id?: string; title?: string; genres?: st
 
   return false;
 }
+

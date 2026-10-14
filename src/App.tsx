@@ -19,7 +19,7 @@ import { APP_VERSION, APP_BUILD_CODE } from './config/version';
 import { Film } from 'lucide-react';
 import { cacheService } from './services/cacheService';
 import { AdultHomeView } from './components/AdultHomeView';
-import { ADULT_HOME_CATALOG, isAdultContent } from './data/adultCatalog';
+import { ADULT_HOME_CATALOG, isAdultContent, isAdultSearchTerm } from './data/adultCatalog';
 import { onesignalService } from './services/onesignalService';
 
 import { SearchModal } from './components/SearchModal';
@@ -31,24 +31,66 @@ const VideoPlayer = lazy(() => import('./components/VideoPlayer').then((m) => ({
 const LiveTvView = lazy(() => import('./components/LiveTvView').then((m) => ({ default: m.LiveTvView })));
 
 const DEFAULT_PROFILE: UserProfile = {
-  name: 'Julian Vance',
-  title: 'Patron of Cinema • Archive Fellow',
+  name: 'User',
+  title: 'CineVault Member',
   memberId: '#CV-88292-2M',
-  sinceYear: '2021',
+  sinceYear: '2024',
 };
 
 export const App: React.FC = () => {
-  // Startup Splash Screen State
-  const [showSplash, setShowSplash] = useState<boolean>(true);
+  // Startup Splash Screen State: OS native splash handles Android APK startup cleanly.
+  // Bypass duplicate second web splash on native devices for seamless 0ms entry.
+  const [showSplash, setShowSplash] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const isNative = Boolean((window as any).AndroidDevice) ||
+                       Boolean((window as any).Capacitor?.isNativePlatform?.()) ||
+                       /Android.*wv|Capacitor/i.test(navigator.userAgent);
+      if (isNative) return false;
+    }
+    return true;
+  });
 
-  // 18+ Vault Mode (Secretly toggled by clicking the logo at the top left)
+  // Family Mode (Parental Safety) - When ON, strictly blocks adult mode, adult search suggestions & adult content
+  const [isFamilyMode, setIsFamilyMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cinevault_family_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // 18+ Vault Mode (Secretly toggled by clicking the logo at the top left when Family Mode is OFF)
   const [isAdultMode, setIsAdultMode] = useState<boolean>(() => {
     try {
+      const familyActive = localStorage.getItem('cinevault_family_mode') === 'true';
+      if (familyActive) return false;
       return localStorage.getItem('cinevault_adult_mode') === 'true';
     } catch {
       return false;
     }
   });
+
+  // Toggle Family Mode handler (persists and cleans adult state)
+  const handleToggleFamilyMode = useCallback((enabled: boolean) => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    setIsFamilyMode(enabled);
+    try {
+      localStorage.setItem('cinevault_family_mode', String(enabled));
+      if (enabled) {
+        setIsAdultMode(false);
+        localStorage.setItem('cinevault_adult_mode', 'false');
+        // Clean any adult recent searches from local storage
+        const saved = localStorage.getItem('cinevault_recent_searches');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const cleaned = parsed.filter((t: string) => !isAdultSearchTerm(t));
+            localStorage.setItem('cinevault_recent_searches', JSON.stringify(cleaned));
+          }
+        }
+      }
+    } catch {}
+  }, []);
 
   // Instant 0ms Cold-Start: Hydrate immediately from stored cache if present
   const [catalog, setCatalog] = useState<HomeCatalogResponse | null>(() => {
@@ -77,6 +119,10 @@ export const App: React.FC = () => {
   }, []);
 
   const toggleAdultMode = useCallback(() => {
+    if (isFamilyMode) {
+      if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+      return;
+    }
     if (navigator.vibrate) navigator.vibrate(12);
     setIsAdultMode((prev) => {
       const next = !prev;
@@ -86,7 +132,7 @@ export const App: React.FC = () => {
       return next;
     });
     setActiveView('home');
-  }, [setActiveView]);
+  }, [isFamilyMode, setActiveView]);
   const [isStartingPlay, setIsStartingPlay] = useState<boolean>(false);
   const [downloadCount, setDownloadCount] = useState<number>(() => {
     try {
@@ -96,7 +142,7 @@ export const App: React.FC = () => {
     }
   });
 
-  // Keep download count updated (15s interval — downloads are long operations, 15s is sufficient)
+  // Keep download count updated on mount and app focus (zero background interval drain)
   useEffect(() => {
     const updateCount = () => {
       try {
@@ -104,12 +150,12 @@ export const App: React.FC = () => {
       } catch {}
     };
     updateCount();
-    const interval = setInterval(updateCount, 15000);
 
     // Initialize OneSignal Push Notifications on device
     onesignalService.init().catch(() => {});
 
-    return () => clearInterval(interval);
+    window.addEventListener('focus', updateCount);
+    return () => window.removeEventListener('focus', updateCount);
   }, []);
 
   // In-App Update State - instantly initialized from persistent cache if an update was detected
@@ -130,6 +176,7 @@ export const App: React.FC = () => {
         const result = await updateService.checkForUpdate(force);
         if (isMounted) {
           if (result.hasUpdate && result.updateInfo) {
+            setShowSplash(false);
             setAvailableUpdate(result.updateInfo);
             setIsMandatoryUpdate(result.isMandatory);
             if (result.isMandatory) {
@@ -152,15 +199,15 @@ export const App: React.FC = () => {
     // Initial check (bypassing cache for instant response)
     checkAppUpdate(true);
 
-    // Periodic background update check every 2 minutes (120s) instead of aggressive 20s to conserve CPU & memory
+    // Periodic background update check every 45 seconds for active updates
     const pollInterval = setInterval(() => {
       checkAppUpdate(false);
-    }, 120000);
+    }, 45000);
 
     // Immediate check whenever user switches back to app / resumes / reconnects online
     const handleActiveResume = () => {
       if (document.visibilityState === 'visible') {
-        checkAppUpdate(false);
+        checkAppUpdate(true);
       }
     };
 
@@ -200,7 +247,18 @@ export const App: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     try {
       const saved = localStorage.getItem('cinevault_user_profile');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          if (parsed.name === 'Julian Vance') {
+            parsed.name = 'User';
+            try {
+              localStorage.setItem('cinevault_user_profile', JSON.stringify(parsed));
+            } catch {}
+          }
+          return parsed;
+        }
+      }
     } catch {}
     return DEFAULT_PROFILE;
   });
@@ -214,8 +272,8 @@ export const App: React.FC = () => {
 
   const userInitials = useMemo(() => {
     const parts = (userProfile.name || '').trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return 'CV';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    if (parts.length === 0) return 'U';
+    if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }, [userProfile.name]);
 
@@ -404,6 +462,37 @@ export const App: React.FC = () => {
   // Render top 6 shelves immediately (0ms first paint), then progressively reveal the rest in batches of 4
   const [renderedShelfCount, setRenderedShelfCount] = useState<number>(6);
 
+  // Picture-in-Picture Mode State: Ensures clean pure video experience
+  const [isInPip, setIsInPip] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handlePipChange = (e: any) => {
+      const inPip = Boolean(e?.detail?.inPip);
+      setIsInPip(inPip);
+      if (inPip) {
+        document.body.classList.add('in-pip-mode');
+        setIsPlayerMinimized(false);
+      } else {
+        document.body.classList.remove('in-pip-mode');
+      }
+    };
+
+    window.addEventListener('pipmodechange', handlePipChange);
+    return () => {
+      window.removeEventListener('pipmodechange', handlePipChange);
+      document.body.classList.remove('in-pip-mode');
+    };
+  }, []);
+
+  // When browsing without an active video, ensure native auto-enter PiP is disabled
+  useEffect(() => {
+    if (!playingMovie && activeView !== 'livetv') {
+      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.setVideoPlaybackActive) {
+        (window as any).AndroidDevice.setVideoPlaybackActive(false, 16, 9);
+      }
+    }
+  }, [playingMovie, activeView]);
+
   useEffect(() => {
     if (!safeCatalog?.rows || safeCatalog.rows.length <= 6) return;
     let timer: ReturnType<typeof setTimeout>;
@@ -575,14 +664,15 @@ export const App: React.FC = () => {
 
       <div className="min-h-screen bg-[#050A18] text-[#F5F7FF] flex flex-col w-full max-w-full overflow-x-hidden">
         {/* Navigation Bar */}
-        {!playingMovie || isPlayerMinimized ? (
+        {!isInPip && (!playingMovie || isPlayerMinimized) ? (
           <Navbar
             onOpenSearch={handleOpenSearch}
             activeView={activeView}
             onNavigate={(view) => setActiveView(view)}
             userName={userProfile.name}
             userInitials={userInitials}
-            isAdultMode={isAdultMode}
+            isAdultMode={isAdultMode && !isFamilyMode}
+            isFamilyMode={isFamilyMode}
             onToggleAdultMode={toggleAdultMode}
           />
         ) : null}
@@ -590,11 +680,15 @@ export const App: React.FC = () => {
         {/* Main Content Area */}
         <main
           ref={mainRef}
-          className="flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:pb-12"
-          style={playingMovie && !isPlayerMinimized ? { display: 'none' } : undefined}
+          className={`flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:pb-12${isInPip && activeView === 'livetv' ? ' pip-active-main !p-0 !m-0 !pb-0' : ''}`}
+          style={
+            (playingMovie && !isPlayerMinimized) || (isInPip && playingMovie)
+              ? { display: 'none' }
+              : undefined
+          }
         >
           {activeView === 'home' && (
-            isAdultMode ? (
+            (isAdultMode && !isFamilyMode) ? (
               <AdultHomeView
                 onPlayMovie={handlePlayMovie}
                 onSelectMovie={handleSelectMovie}
@@ -700,13 +794,15 @@ export const App: React.FC = () => {
                   setAvailableUpdate(info);
                   setIsMandatoryUpdate(false);
                 }}
+                isFamilyMode={isFamilyMode}
+                onToggleFamilyMode={handleToggleFamilyMode}
               />
             </div>
           )}
         </main>
 
         {/* Mobile Navigation Dock */}
-        {!playingMovie || isPlayerMinimized ? (
+        {!isInPip && (!playingMovie || isPlayerMinimized) ? (
           <BottomNav
             activeView={activeView}
             onNavigate={(v) => setActiveView(v)}
@@ -716,14 +812,15 @@ export const App: React.FC = () => {
         ) : null}
 
         {/* Search Modal (Instant zero-lag render with pre-loaded initial catalog) */}
-        {isSearchOpen && (
+        {isSearchOpen && !isInPip && (
           <SearchModal
             isOpen={isSearchOpen}
             onClose={handleCloseSearch}
             onSelectMovie={handleSelectMovie}
-            isAdultMode={isAdultMode}
+            isAdultMode={isAdultMode && !isFamilyMode}
+            isFamilyMode={isFamilyMode}
             initialMovies={
-              isAdultMode
+              (isAdultMode && !isFamilyMode)
                 ? (ADULT_HOME_CATALOG.rows[0]?.items || [])
                 : (safeCatalog?.rows?.[0]?.items || [])
             }
@@ -731,7 +828,7 @@ export const App: React.FC = () => {
         )}
 
         {/* Movie Details Modal */}
-        {selectedMovie && (
+        {selectedMovie && !isInPip && (
           <Suspense fallback={null}>
             <MovieDetailsModal
               movie={selectedMovie}
@@ -740,7 +837,7 @@ export const App: React.FC = () => {
               isWatchlisted={watchlistIds.has(selectedMovie.id)}
               onToggleWatchlist={toggleWatchlist}
               onSelectMovie={handleSelectMovie}
-              catalogRows={isAdultMode ? (ADULT_HOME_CATALOG.rows || []) : (safeCatalog?.rows || [])}
+              catalogRows={(isAdultMode && !isFamilyMode) ? (ADULT_HOME_CATALOG.rows || []) : (safeCatalog?.rows || [])}
             />
           </Suspense>
         )}
@@ -752,7 +849,7 @@ export const App: React.FC = () => {
               movie={playingMovie.movie}
               season={playingMovie.season}
               episode={playingMovie.episode}
-              isMinimized={isPlayerMinimized}
+              isMinimized={isInPip ? false : isPlayerMinimized}
               onMinimize={handleMinimizePlayer}
               onRestore={handleRestorePlayer}
               onBack={handleBackFromPlayer}

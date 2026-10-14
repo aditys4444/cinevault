@@ -13,10 +13,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     // Micro-delay to trigger entry transitions cleanly
     requestAnimationFrame(() => setMounted(true));
 
-    // Snappy, luxurious 850ms brand display
+    // Snappy, luxurious brand display
     const timer = setTimeout(() => {
       setFadingOut(true);
-    }, 850);
+    }, 600);
 
     return () => clearTimeout(timer);
   }, []);
@@ -25,7 +25,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     if (fadingOut) {
       const exitTimer = setTimeout(() => {
         onComplete();
-      }, 250); // 250ms smooth crossfade
+      }, 200); // 200ms smooth crossfade
       return () => clearTimeout(exitTimer);
     }
   }, [fadingOut, onComplete]);
@@ -49,9 +49,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         {/* Emblem/Logo Container with Glassmorphic Glow */}
         <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex items-center justify-center drop-shadow-[0_16px_40px_rgba(23,107,255,0.45)]">
           <img
-            src="/logo-user.png"
+            src="/logo-emblem-clean.png"
             alt="CineVault"
-            className="w-full h-full object-contain filter drop-shadow-[0_8px_24px_rgba(0,0,0,0.8)]"
+            className="w-full h-full object-contain filter drop-shadow-[0_8px_24px_rgba(23,107,255,0.5)]"
             draggable={false}
           />
         </div>

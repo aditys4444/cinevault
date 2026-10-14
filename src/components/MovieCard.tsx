@@ -44,7 +44,7 @@ export const MovieCard: React.FC<MovieCardProps> = memo(({ movie, onSelect, prio
       className="group relative flex flex-col w-[130px] sm:w-[155px] md:w-[175px] shrink-0 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#176BFF] rounded-xl press-feedback sm:hover:scale-[1.03] transition-transform duration-200 scroll-snap-start"
     >
       {/* Poster Image Container */}
-      <div className="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#0E1726] border border-[#1E293B] sm:group-hover:border-[#35A7FF]/50 shadow-[0_4px_16px_rgba(6,9,17,0.7)] sm:group-hover:shadow-[0_8px_25px_rgba(23,107,255,0.3)] transition-all duration-200">
+      <div className="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#0E1726] border border-[#1E293B] sm:group-hover:border-[#35A7FF]/50 shadow-[0_4px_16px_rgba(6,9,17,0.7)] sm:group-hover:shadow-[0_8px_25px_rgba(23,107,255,0.3)] transition-all duration-200 cinevault-shine">
         {/* Lightweight static placeholder while loading (0% GPU/CPU overhead) */}
         {!imageLoaded && (
           <div className="absolute inset-0 bg-[#0E1726] flex items-center justify-center">

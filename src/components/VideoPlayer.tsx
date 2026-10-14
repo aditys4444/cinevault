@@ -32,6 +32,7 @@ import {
   PictureInPicture,
   Subtitles,
   Download,
+  Star,
 } from 'lucide-react';
 import { DownloadQualityModal } from './DownloadQualityModal';
 
@@ -368,6 +369,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   const [showUnlockPrompt, setShowUnlockPrompt] = useState<boolean>(false);
   const unlockPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Post-Playback & Review Prompt State
+  const [isPlaybackEnded, setIsPlaybackEnded] = useState<boolean>(false);
+  const [userRating, setUserRating] = useState<number>(0);
+  const [ratingSubmitted, setRatingSubmitted] = useState<boolean>(false);
+
+  // Double-Tap Animated Wave/Ripple Overlay State
+  const [doubleTapRipple, setDoubleTapRipple] = useState<{ side: 'left' | 'right'; id: number } | null>(null);
+  const doubleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Core Refs for Atomic Playback & Seeking Lifecycle
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -393,6 +403,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     initialVal: number;
     hasMoved: boolean;
   } | null>(null);
+
+  // Complete hardware decoder release on player unmount
+  useEffect(() => {
+    return () => {
+      const video = videoRef.current;
+      if (video) {
+        try {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        } catch {}
+      }
+    };
+  }, []);
   const lastTapRef = useRef<number>(0);
 
   const isTv = useMemo(() => {
@@ -487,6 +511,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
   // Controls Visibility Timer (Auto-hides after 3.5s when playing)
   const triggerShowControls = useCallback(() => {
+    if (isInPip) {
+      setShowControls(false);
+      return;
+    }
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     controlsTimeoutRef.current = setTimeout(() => {
@@ -494,7 +522,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         setShowControls(false);
       }
     }, 3500);
-  }, [isQualityMenuOpen, isSpeedMenuOpen, isEpisodesMenuOpen, isLanguageMenuOpen]);
+  }, [isInPip, isQualityMenuOpen, isSpeedMenuOpen, isEpisodesMenuOpen, isLanguageMenuOpen]);
 
   // Dynamic Language Discovery (Lazy loaded on demand or after steady playback to preserve instant 0ms start)
   useEffect(() => {
@@ -662,10 +690,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   // Picture-in-Picture trigger
   const triggerPictureInPicture = useCallback(async () => {
     try {
-      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.enterPipMode) {
+      if (isMinimized) {
+        onRestore?.();
+      }
+      setIsInPip(true);
+      setShowControls(false);
+      document.body.classList.add('in-pip-mode');
+
+      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.enterPipModeRatio && videoRef.current) {
+        const vWidth = videoRef.current.videoWidth || 16;
+        const vHeight = videoRef.current.videoHeight || 9;
+        const handled = (window as any).AndroidDevice.enterPipModeRatio(vWidth, vHeight);
+        if (handled) return;
+      } else if (typeof window !== 'undefined' && (window as any).AndroidDevice?.enterPipMode) {
         const handled = (window as any).AndroidDevice.enterPipMode();
         if (handled) return;
       }
+
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
       } else if (videoRef.current && document.pictureInPictureEnabled) {
@@ -674,7 +715,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     } catch (err) {
       console.warn('Picture-in-picture error:', err);
     }
-  }, []);
+  }, [isMinimized, onRestore]);
 
   // Back to app handler: smoothly returns to browsing/mini-player in app WITHOUT forcing OS Picture in Picture
   const handleBackToApp = useCallback(() => {
@@ -720,34 +761,61 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
   // Sync Picture in Picture state & events
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
-    const onEnterPip = () => setIsInPip(true);
+    const onEnterPip = () => {
+      setIsInPip(true);
+      setShowControls(false);
+      document.body.classList.add('in-pip-mode');
+    };
     const onLeavePip = () => {
       setIsInPip(false);
+      document.body.classList.remove('in-pip-mode');
       onRestore?.();
     };
-    video.addEventListener('enterpictureinpicture', onEnterPip);
-    video.addEventListener('leavepictureinpicture', onLeavePip);
+
+    if (video) {
+      video.addEventListener('enterpictureinpicture', onEnterPip);
+      video.addEventListener('leavepictureinpicture', onLeavePip);
+    }
+
     const onNativePipChange = (e: any) => {
       const inPip = Boolean(e?.detail?.inPip);
       setIsInPip(inPip);
-      if (!inPip) {
+      if (inPip) {
+        setShowControls(false);
+        document.body.classList.add('in-pip-mode');
+      } else {
+        document.body.classList.remove('in-pip-mode');
         onRestore?.();
       }
     };
     window.addEventListener('pipmodechange', onNativePipChange);
+
     return () => {
-      video.removeEventListener('enterpictureinpicture', onEnterPip);
-      video.removeEventListener('leavepictureinpicture', onLeavePip);
+      if (video) {
+        video.removeEventListener('enterpictureinpicture', onEnterPip);
+        video.removeEventListener('leavepictureinpicture', onLeavePip);
+      }
       window.removeEventListener('pipmodechange', onNativePipChange);
+      document.body.classList.remove('in-pip-mode');
     };
   }, [onRestore]);
 
-  // Register global PiP triggers for Android onUserLeaveHint (entering PiP when exiting app directly)
+  // Register global PiP triggers & sync native playback state with AndroidDevice
   useEffect(() => {
-    (window as any).__cinevaultCanAutoPip = () => isPlaying && !error;
+    const isPlayingNow = isPlaying && !error;
+    const vWidth = videoRef.current?.videoWidth || 16;
+    const vHeight = videoRef.current?.videoHeight || 9;
+
+    if (typeof window !== 'undefined' && (window as any).AndroidDevice?.setVideoPlaybackActive) {
+      (window as any).AndroidDevice.setVideoPlaybackActive(isPlayingNow, vWidth, vHeight);
+    }
+    (window as any).__cinevaultCanAutoPip = () => isPlayingNow;
     (window as any).__cinevaultTriggerPip = triggerPictureInPicture;
+
     return () => {
+      if (typeof window !== 'undefined' && (window as any).AndroidDevice?.setVideoPlaybackActive) {
+        (window as any).AndroidDevice.setVideoPlaybackActive(false, 16, 9);
+      }
       delete (window as any).__cinevaultCanAutoPip;
       delete (window as any).__cinevaultTriggerPip;
     };
@@ -1362,7 +1430,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
     setIsPlaying(false);
     setIsBuffering(false);
-    setShowControls(true);
+    if (!isInPip) {
+      setShowControls(true);
+    }
 
     if (video && video.duration > 0) {
       cacheService.saveWatchedProgress(
@@ -1374,6 +1444,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       );
     }
   };
+
+  const handleVideoEnded = useCallback(() => {
+    setIsPlaybackEnded(true);
+    setIsPlaying(false);
+    if (!isInPip) {
+      setShowControls(true);
+    }
+    try {
+      const ratings = JSON.parse(localStorage.getItem('cinevault_user_ratings') || '{}');
+      if (ratings[currentMovie.id]) {
+        setUserRating(ratings[currentMovie.id]);
+        setRatingSubmitted(true);
+      } else {
+        setUserRating(0);
+        setRatingSubmitted(false);
+      }
+    } catch {}
+  }, [currentMovie.id]);
 
   const handleVideoError = async () => {
     const video = videoRef.current;
@@ -1502,6 +1590,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
 
   // Background Surface Click (Toggles controls visibility ONLY — NEVER pauses playback)
   const handleSurfaceClick = (e: React.MouseEvent) => {
+    if (isInPip) {
+      return;
+    }
     if (touchStartPosRef.current?.hasMoved) {
       return;
     }
@@ -1532,16 +1623,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
     }
 
     const now = Date.now();
-    if (now - lastTapRef.current < 300) {
+    if (now - lastTapRef.current < 320) {
       lastTapRef.current = 0;
       const clientX = e.clientX;
       const width = window.innerWidth || document.documentElement.clientWidth;
       if (clientX < width * 0.4) {
         handleSkip(-10);
         showToast('Rewind 10s');
+        setDoubleTapRipple({ side: 'left', id: now });
+        if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+        doubleTapTimerRef.current = setTimeout(() => setDoubleTapRipple(null), 580);
       } else if (clientX > width * 0.6) {
         handleSkip(10);
         showToast('Forward 10s');
+        setDoubleTapRipple({ side: 'right', id: now });
+        if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+        doubleTapTimerRef.current = setTimeout(() => setDoubleTapRipple(null), 580);
       } else {
         togglePlayPause();
       }
@@ -1756,15 +1853,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       onTouchCancel={handleTouchEnd}
       onPointerUp={handleTouchEnd}
       className={
-        isMinimized
+        isInPip
+          ? 'fixed inset-0 z-[9999999] w-screen h-screen bg-black flex items-center justify-center select-none overflow-hidden touch-none p-0 m-0 border-none rounded-none pip-video-container'
+          : isMinimized
           ? 'fixed bottom-16 sm:bottom-4 left-2 right-2 sm:left-auto sm:right-6 sm:w-[420px] h-16 sm:h-[68px] z-50 bg-[#0B1224]/95 backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-[0_12px_40px_rgba(5,10,24,0.85)] flex items-center p-1.5 sm:p-2 select-none overflow-hidden group cursor-pointer animate-fade-in'
           : `fixed inset-0 z-50 w-full h-full bg-black flex items-center justify-center select-none overflow-hidden touch-none${isFullscreen ? ' player-fullscreen-mode' : ''}`
       }
       style={undefined}
     >
       {/* Toast Notification */}
-      {!isMinimized && toastMessage && (
-        <div className="absolute top-16 z-50 px-4 py-2 rounded-xl bg-[#176BFF] text-white font-bold text-xs sm:text-sm shadow-[0_4px_20px_rgba(23,107,255,0.45)] animate-fade-in pointer-events-none">
+      {!isMinimized && !isInPip && toastMessage && (
+        <div className="absolute top-16 z-50 px-4 py-2 rounded-xl bg-[#176BFF] text-white font-bold text-xs sm:text-sm shadow-[0_4px_20px_rgba(23,107,255,0.45)] animate-fade-in pointer-events-none pip-controls-hide">
           {toastMessage}
         </div>
       )}
@@ -1772,7 +1871,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       {/* Persistent HTML5 Video Element */}
       <div
         className={
-          isMinimized
+          isInPip
+            ? 'absolute inset-0 w-full h-full overflow-hidden bg-black flex items-center justify-center p-0 m-0 border-none rounded-none'
+            : isMinimized
             ? 'w-24 sm:w-28 h-full rounded-xl overflow-hidden bg-black flex-shrink-0 relative flex items-center justify-center'
             : 'absolute inset-0 w-full h-full overflow-hidden bg-black flex items-center justify-center'
         }
@@ -1795,15 +1896,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
           onPause={handlePause}
           onSeeked={handleSeeked}
           onError={handleVideoError}
+          onEnded={handleVideoEnded}
           poster={movie.backdrop || movie.poster || undefined}
-          data-fit={effectiveFitMode}
-          style={{ objectFit: effectiveFitMode, transform: 'translateZ(0)', willChange: 'transform' }}
-          className={`w-full h-full transition-[object-fit] duration-150 ${
-            effectiveFitMode === 'cover'
+          data-fit={isInPip ? 'contain' : effectiveFitMode}
+          style={{ objectFit: isInPip ? 'contain' : effectiveFitMode, transform: 'translateZ(0)', willChange: 'transform' }}
+          className={`w-full h-full transition-[object-fit] duration-150 pip-video-element ${
+            isInPip || effectiveFitMode === 'contain'
+              ? 'object-contain'
+              : effectiveFitMode === 'cover'
               ? 'object-cover'
-              : effectiveFitMode === 'fill'
-              ? 'object-fill'
-              : 'object-contain'
+              : 'object-fill'
           }`}
         >
           {captions.map((cap) => (
@@ -1819,9 +1921,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         </video>
 
         {/* Hardware-accelerated Software Brightness Scrim */}
-        {!isMinimized && (
+        {!isMinimized && !isInPip && (
           <div
-            className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-100"
+            className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-100 pip-controls-hide"
             style={{
               backgroundColor: '#000000',
               opacity: Math.max(0, 1 - brightness),
@@ -1830,8 +1932,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         )}
 
         {/* Sleek Top Percentage Indicator when scrolling Volume or Brightness */}
-        {!isMinimized && activeGesture && (
-          <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2 rounded-full bg-[#0B1224]/95 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.85)] pointer-events-none animate-fade-in">
+        {!isMinimized && !isInPip && activeGesture && (
+          <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2 rounded-full bg-[#0B1224]/95 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.85)] pointer-events-none animate-fade-in pip-controls-hide">
             {activeGesture === 'volume' ? (
               gestureValue === 0 || isMuted ? (
                 <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 flex-shrink-0" />
@@ -1854,8 +1956,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         )}
 
         {/* Quality Switching Pill Indicator */}
-        {!isMinimized && isSwitchingQuality && (
-          <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0B1224]/95 backdrop-blur-xl border border-[#35A7FF]/40 shadow-[0_8px_32px_rgba(23,107,255,0.45)] pointer-events-none animate-fade-in">
+        {!isMinimized && !isInPip && isSwitchingQuality && (
+          <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0B1224]/95 backdrop-blur-xl border border-[#35A7FF]/40 shadow-[0_8px_32px_rgba(23,107,255,0.45)] pointer-events-none animate-fade-in pip-controls-hide">
             <Loader2 className="w-3.5 h-3.5 text-[#35A7FF] animate-spin" />
             <span className="text-xs font-bold font-mono text-white tracking-wider">
               Switching to {switchingQualityName || selectedQuality}...
@@ -1864,8 +1966,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         )}
 
         {/* Left Edge: Slim Brightness Scrollbar sticking with video player */}
-        {!isMinimized && activeGesture === 'brightness' && (
-          <div className="absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center pointer-events-none animate-fade-in">
+        {!isMinimized && !isInPip && activeGesture === 'brightness' && (
+          <div className="absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center pointer-events-none animate-fade-in pip-controls-hide">
             <div className="relative w-1.5 sm:w-2 h-36 sm:h-48 bg-black/60 backdrop-blur-md rounded-full overflow-hidden p-0.5 border border-white/20 shadow-[0_0_12px_rgba(0,0,0,0.7)] flex flex-col justify-end">
               <div
                 className="w-full bg-gradient-to-t from-[#176BFF] to-[#35A7FF] rounded-full transition-all duration-75 shadow-[0_0_8px_rgba(53,167,255,0.7)]"
@@ -1876,8 +1978,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         )}
 
         {/* Right Edge: Slim Volume Scrollbar sticking with video player */}
-        {!isMinimized && activeGesture === 'volume' && (
-          <div className="absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center pointer-events-none animate-fade-in">
+        {!isMinimized && !isInPip && activeGesture === 'volume' && (
+          <div className="absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center pointer-events-none animate-fade-in pip-controls-hide">
             <div className="relative w-1.5 sm:w-2 h-36 sm:h-48 bg-black/60 backdrop-blur-md rounded-full overflow-hidden p-0.5 border border-white/20 shadow-[0_0_12px_rgba(0,0,0,0.7)] flex flex-col justify-end">
               <div
                 className="w-full bg-gradient-to-t from-[#176BFF] to-[#35A7FF] rounded-full transition-all duration-75 shadow-[0_0_8px_rgba(53,167,255,0.7)]"
@@ -1887,8 +1989,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
           </div>
         )}
 
+        {/* Double-Tap Skip Ripple Wave Overlay (Netflix/YouTube tactile feedback) */}
+        {!isMinimized && !isInPip && doubleTapRipple?.side === 'left' && (
+          <div className="absolute left-0 top-0 bottom-0 w-1/3 flex items-center justify-center pointer-events-none z-40 overflow-hidden pip-controls-hide">
+            <div className="w-full h-full bg-gradient-to-r from-[#176BFF]/30 to-transparent flex flex-col items-center justify-center animate-ripple-left rounded-r-full border-r border-[#35A7FF]/40 backdrop-blur-[2px]">
+              <RotateCcw className="w-10 h-10 text-[#35A7FF] drop-shadow-[0_0_12px_rgba(53,167,255,0.8)] animate-pulse" />
+              <span className="text-sm sm:text-base font-black font-mono tracking-wider text-white mt-1 drop-shadow-md">
+                -10s
+              </span>
+            </div>
+          </div>
+        )}
+
+        {!isMinimized && !isInPip && doubleTapRipple?.side === 'right' && (
+          <div className="absolute right-0 top-0 bottom-0 w-1/3 flex items-center justify-center pointer-events-none z-40 overflow-hidden pip-controls-hide">
+            <div className="w-full h-full bg-gradient-to-l from-[#176BFF]/30 to-transparent flex flex-col items-center justify-center animate-ripple-right rounded-l-full border-l border-[#35A7FF]/40 backdrop-blur-[2px]">
+              <RotateCw className="w-10 h-10 text-[#35A7FF] drop-shadow-[0_0_12px_rgba(53,167,255,0.8)] animate-pulse" />
+              <span className="text-sm sm:text-base font-black font-mono tracking-wider text-white mt-1 drop-shadow-md">
+                +10s
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Minimized Buffering Spinner */}
-        {isMinimized && (isBuffering || loading) && (
+        {isMinimized && !isInPip && (isBuffering || loading) && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
             <Loader2 className="w-5 h-5 text-[#35A7FF] animate-spin" />
           </div>
@@ -1896,7 +2021,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       </div>
 
       {/* MINIMIZED DOCKED MINI-PLAYER UI */}
-      {isMinimized && (
+      {isMinimized && !isInPip && (
         <>
           <div
             className="flex-1 min-w-0 px-3 py-1 cursor-pointer flex flex-col justify-center"
@@ -1970,23 +2095,132 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
         </>
       )}
 
-      {/* SINGLE UNIFIED BUFFERING / LOADING SPINNER */}
-      {!isMinimized && (isBuffering || loading) && !error && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/40 pointer-events-none animate-fade-in">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#0B1224]/85 border border-white/15 backdrop-blur-xl flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.85)]">
-            <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-[#35A7FF] animate-spin" />
-          </div>
-          {loading && (
-            <p className="mt-3 text-xs sm:text-sm font-semibold text-[#F5F7FF] tracking-wide drop-shadow">
-              Loading stream...
-            </p>
+      {/* LUXURY STREAM LOADING & BUFFERING OVERLAY */}
+      {!isMinimized && !isInPip && (isBuffering || loading) && !error && !isPlaybackEnded && (
+        <div className={`absolute inset-0 z-40 flex flex-col items-center justify-center pointer-events-none animate-fade-in pip-controls-hide ${loading ? 'bg-black/80 backdrop-blur-sm' : ''}`}>
+          {loading ? (
+            /* Luxury Initial Stream Connection Screen */
+            <div className="flex flex-col items-center text-center p-6 max-w-xs animate-scale-in select-none">
+              <div className="relative w-20 h-20 mb-4 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full border border-[#176BFF]/30 animate-ping" />
+                <div className="w-16 h-16 rounded-full bg-[#0B1224]/90 border border-white/20 backdrop-blur-xl flex items-center justify-center shadow-[0_0_30px_rgba(23,107,255,0.5)]">
+                  <Loader2 className="w-8 h-8 text-[#35A7FF] animate-spin" />
+                </div>
+              </div>
+              <h4 className="text-base sm:text-lg font-black text-white tracking-tight line-clamp-1 drop-shadow-md font-headline">
+                {currentMovie.title}
+              </h4>
+              {isTv && (
+                <span className="text-[11px] font-semibold text-[#8D9AB5] mt-0.5">
+                  Season {currentSeason} • Episode {currentEpisode}
+                </span>
+              )}
+              <div className="mt-3 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#176BFF]/15 border border-[#35A7FF]/30">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#35A7FF] animate-pulse" />
+                <span className="text-[10px] font-bold tracking-wider uppercase text-[#35A7FF]">
+                  {selectedQuality && selectedQuality !== 'Auto' ? `${selectedQuality} • Ultra Stream` : 'Connecting 4K Stream'}
+                </span>
+              </div>
+            </div>
+          ) : (
+            /* Lightweight Micro-Buffering Indicator (zero full-screen darkening) */
+            <div className="w-14 h-14 rounded-full bg-[#0B1224]/80 border border-white/15 backdrop-blur-md flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.85)]">
+              <Loader2 className="w-7 h-7 text-[#35A7FF] animate-spin" />
+            </div>
           )}
         </div>
       )}
 
+      {/* Clean PiP Buffering Spinner (Micro spinner only) */}
+      {isInPip && (isBuffering || loading) && !error && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/40">
+          <Loader2 className="w-6 h-6 text-[#35A7FF] animate-spin" />
+        </div>
+      )}
+
+      {/* POST-PLAYBACK / REVIEW PROMPT OVERLAY */}
+      {!isMinimized && !isInPip && isPlaybackEnded && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 p-4 select-none backdrop-blur-md animate-fade-in pointer-events-auto pip-controls-hide">
+          <div className="relative z-10 flex flex-col items-center text-center max-w-sm w-full p-6 rounded-3xl bg-[#0B1224]/95 border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.9)] animate-scale-in">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#176BFF]/30 to-[#35A7FF]/30 border border-[#35A7FF]/40 flex items-center justify-center mb-3 shadow-[0_0_24px_rgba(53,167,255,0.3)]">
+              <Check className="w-7 h-7 text-[#35A7FF]" />
+            </div>
+
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#35A7FF] bg-[#176BFF]/15 px-3 py-1 rounded-full border border-[#35A7FF]/20">
+              Completed Playback
+            </span>
+
+            <h3 className="text-lg sm:text-xl font-black text-white mt-2 font-headline line-clamp-1">
+              {currentMovie.title}
+            </h3>
+
+            {/* Quick 5-Star Rating / Review Prompt */}
+            <div className="mt-4 w-full py-3 px-4 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex flex-col items-center">
+              <p className="text-xs font-semibold text-[#8D9AB5]">
+                {ratingSubmitted ? 'Thank you for your rating!' : 'How was the stream? Rate this title:'}
+              </p>
+              <div className="flex items-center gap-1.5 mt-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => {
+                      setUserRating(star);
+                      setRatingSubmitted(true);
+                      showToast(`Rated ${star} ★ — Thank you!`);
+                      try {
+                        const ratings = JSON.parse(localStorage.getItem('cinevault_user_ratings') || '{}');
+                        ratings[currentMovie.id] = star;
+                        localStorage.setItem('cinevault_user_ratings', JSON.stringify(ratings));
+                      } catch {}
+                    }}
+                    className="p-1.5 transition-transform hover:scale-125 active:scale-95 cursor-pointer"
+                    title={`Rate ${star} Stars`}
+                  >
+                    <Star
+                      className={`w-6 h-6 transition-colors ${
+                        star <= userRating
+                          ? 'text-[#FFB800] fill-[#FFB800] drop-shadow-[0_0_8px_rgba(255,184,0,0.6)]'
+                          : 'text-white/20 hover:text-white/40'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 w-full mt-5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPlaybackEnded(false);
+                  if (videoRef.current) {
+                    videoRef.current.currentTime = 0;
+                    safePlay();
+                  }
+                }}
+                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-[#176BFF] to-[#35A7FF] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-[0_6px_20px_rgba(23,107,255,0.4)] hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Watch Again</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onBack}
+                className="py-3 px-5 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-white font-semibold text-xs border border-white/10 active:scale-95 transition-all cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PLAYBACK ERROR CARD */}
-      {!isMinimized && !loading && error && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/90 p-4 pointer-events-auto">
+      {!isMinimized && !isInPip && !loading && error && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/90 p-4 pointer-events-auto pip-controls-hide">
           <div className="flex flex-col items-center gap-4 text-center p-6 max-w-md bg-[#0B1224] rounded-2xl border border-white/[0.08] shadow-2xl animate-scale-in">
             <AlertCircle className={`w-12 h-12 ${(currentMovie.is_coming_soon || currentMovie.has_resource === false) ? 'text-[#35A7FF]' : 'text-red-400'}`} />
             <div>
@@ -2038,9 +2272,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       )}
 
       {/* Floating Screen Lock Button (when controls are visible & unlocked) */}
-      {!isMinimized && activeStreamUrl && !error && !isLocked && (
+      {!isMinimized && !isInPip && activeStreamUrl && !error && !isLocked && (
         <div
-          className={`absolute top-1/2 -translate-y-1/2 z-40 transition-opacity duration-200 ${
+          className={`absolute top-1/2 -translate-y-1/2 z-40 transition-opacity duration-200 pip-controls-hide ${
             showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
           style={{
@@ -2069,9 +2303,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       )}
 
       {/* Floating Unlock Button (when screen is locked) */}
-      {!isMinimized && activeStreamUrl && !error && isLocked && (
+      {!isMinimized && !isInPip && activeStreamUrl && !error && isLocked && (
         <div
-          className={`absolute top-1/2 -translate-y-1/2 z-50 transition-all duration-300 pointer-events-auto ${
+          className={`absolute top-1/2 -translate-y-1/2 z-50 transition-all duration-300 pointer-events-auto pip-controls-hide ${
             showUnlockPrompt ? 'opacity-100 scale-100' : 'opacity-40 hover:opacity-100 scale-95 hover:scale-100'
           }`}
           style={{
@@ -2099,9 +2333,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       )}
 
       {/* FULLSCREEN OVERLAY CONTROLS (Standard, Familiar Streaming UI) */}
-      {!isMinimized && activeStreamUrl && !error && !isLocked && (
+      {!isMinimized && !isInPip && activeStreamUrl && !error && !isLocked && (
         <div
-          className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-200 pointer-events-none z-30 ${
+          className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-200 pointer-events-none z-30 pip-control-overlay pip-controls-hide ${
             showControls ? 'opacity-100' : 'opacity-0'
           }`}
         >
@@ -2796,7 +3030,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       )}
 
       {/* Full-featured Seasons & Episodes Drawer / Modal */}
-      {isTv && isEpisodesMenuOpen && !isMinimized && (
+      {isTv && isEpisodesMenuOpen && !isMinimized && !isInPip && (
         <div
           onClick={(e) => {
             e.stopPropagation();
@@ -2937,7 +3171,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = memo(({
       )}
 
       {/* Download Quality Selector Modal */}
-      {isDownloadModalOpen && currentMovie && streamInfo?.qualities && (
+      {isDownloadModalOpen && !isInPip && currentMovie && streamInfo?.qualities && (
         <DownloadQualityModal
           isOpen={isDownloadModalOpen}
           onClose={() => setIsDownloadModalOpen(false)}

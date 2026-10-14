@@ -132,11 +132,26 @@ class UpdateService {
   }
 
   /**
-   * Synchronously retrieves any previously detected newer update stored in localStorage.
+   * Synchronously retrieves any previously detected newer update stored in localStorage
+   * or early prefetched during HTML page load.
    * Enables the app to render the update screen immediately (0ms) on cold start.
    */
   getCachedPendingUpdate(): UpdateInfo | null {
     try {
+      // 1. Check early pre-fetched data from index.html (runs before React initializes)
+      if (typeof window !== 'undefined' && (window as any).__CINEVAULT_EARLY_UPDATE_DATA) {
+        const earlyData = (window as any).__CINEVAULT_EARLY_UPDATE_DATA;
+        const normalized = this.normalizePayload(earlyData);
+        if (normalized) {
+          const codeIsNewer = normalized.latestVersionCode > APP_BUILD_CODE;
+          const semverIsNewer = compareVersions(normalized.latestVersionName, APP_VERSION) > 0;
+          if (codeIsNewer || semverIsNewer) {
+            return normalized;
+          }
+        }
+      }
+
+      // 2. Check localStorage cache
       const raw = localStorage.getItem('cinevault_pending_update');
       if (!raw) return null;
       const data = JSON.parse(raw);
@@ -193,53 +208,67 @@ class UpdateService {
     let lastError = '';
 
     try {
-      // Query endpoints in parallel with fastest-responder (Promise.any) for instant detection
-      const fetchEndpoint = async (endpoint: string): Promise<UpdateInfo> => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+      let normalized: UpdateInfo | null = null;
+
+      // 1. Consume early prefetch promise from index.html if available (0ms network overlap)
+      if (typeof window !== 'undefined' && (window as any).__CINEVAULT_EARLY_UPDATE_PROMISE) {
+        try {
+          const earlyRaw = await (window as any).__CINEVAULT_EARLY_UPDATE_PROMISE;
+          delete (window as any).__CINEVAULT_EARLY_UPDATE_PROMISE;
+          if (earlyRaw && typeof earlyRaw === 'object') {
+            normalized = this.normalizePayload(earlyRaw);
+          }
+        } catch {}
+      }
+
+      // 2. Query endpoints in parallel with fastest-responder (Promise.any) if early prefetch wasn't used
+      if (!normalized) {
+        const fetchEndpoint = async (endpoint: string): Promise<UpdateInfo> => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+          try {
+            const cacheBuster = `?t=${Date.now()}`;
+            const urlWithParam = endpoint.includes('?')
+              ? `${endpoint}&t=${Date.now()}`
+              : `${endpoint}${cacheBuster}`;
+
+            const response = await fetch(urlWithParam, {
+              method: 'GET',
+              headers: {
+                Accept: 'application/json',
+              },
+              cache: 'no-store',
+              signal: controller.signal,
+            });
+
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status} from ${endpoint}`);
+            }
+
+            const rawText = await response.text();
+            const cleanText = rawText.replace(/^\uFEFF/, '').trim();
+            if (!cleanText) {
+              throw new Error('Empty response payload');
+            }
+
+            const data: RemoteUpdatePayload = JSON.parse(cleanText);
+            const norm = this.normalizePayload(data);
+            if (!norm) {
+              throw new Error('Invalid update payload structure');
+            }
+
+            return norm;
+          } finally {
+            clearTimeout(timeoutId);
+          }
+        };
 
         try {
-          const cacheBuster = `?t=${Date.now()}`;
-          const urlWithParam = endpoint.includes('?')
-            ? `${endpoint}&t=${Date.now()}`
-            : `${endpoint}${cacheBuster}`;
-
-          const response = await fetch(urlWithParam, {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json',
-            },
-            cache: 'no-store',
-            signal: controller.signal,
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status} from ${endpoint}`);
-          }
-
-          const rawText = await response.text();
-          const cleanText = rawText.replace(/^\uFEFF/, '').trim();
-          if (!cleanText) {
-            throw new Error('Empty response payload');
-          }
-
-          const data: RemoteUpdatePayload = JSON.parse(cleanText);
-          const normalized = this.normalizePayload(data);
-          if (!normalized) {
-            throw new Error('Invalid update payload structure');
-          }
-
-          return normalized;
-        } finally {
-          clearTimeout(timeoutId);
+          normalized = await Promise.any(UPDATE_ENDPOINTS.map(fetchEndpoint));
+        } catch (aggregateErr: any) {
+          lastError = aggregateErr?.errors?.[0]?.message || 'All update endpoints unreachable';
         }
-      };
-
-      let normalized: UpdateInfo | null = null;
-      try {
-        normalized = await Promise.any(UPDATE_ENDPOINTS.map(fetchEndpoint));
-      } catch (aggregateErr: any) {
-        lastError = aggregateErr?.errors?.[0]?.message || 'All update endpoints unreachable';
       }
 
       if (normalized) {

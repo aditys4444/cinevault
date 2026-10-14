@@ -1,25 +1,24 @@
 {
-  "latestVersionCode": 2900,
-  "latestVersionName": "2.9.0",
+  "latestVersionCode": 2910,
+  "latestVersionName": "2.9.1",
   "websiteUrl": "https://cinevaultapk.online/",
   "apkDownloadUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "directApkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
-  "updateMessage": "Instant Playback Quality Switching, Fast Suggestions & Cinematic Splash Screen",
+  "updateMessage": "Family Mode in Settings, Filtered Adult Suggestions, UI & Mobile Polish",
   "forceUpdate": true,
-  "version": "2.9.0",
-  "versionCode": 2900,
-  "releaseDate": "2026-10-06",
+  "version": "2.9.1",
+  "versionCode": 2910,
+  "releaseDate": "2026-10-14",
   "changelog": [
-    "Instant & smooth quality switching during playback with preserved position",
-    "Smart caption toggle: only displays CC button when subtitles exist",
-    "Crystal-clear home hero banner with clean artwork and bold titles",
-    "Instant zero-lag 'More Content Suggestions' directly below movie synopsis",
-    "Cinematic luxury startup splash screen with seamless crossfade"
+    "Added Family Mode in Settings to toggle adult catalog visibility",
+    "Filtered adult search suggestions when Family Mode is enabled",
+    "Streamlined mobile & tablet responsive navigation layout",
+    "Enhanced player stability and direct Live TV channel loading"
   ],
   "apkUrl": "https://cinevaultapk.online/downloads/CineVault.apk",
   "mandatory": true,
   "minVersion": "2.0.0",
-  "sha256": "059b324f1ecdf94f7764fa92f12a0e1bf37c98f4e53bd2d8a56996c232c094ce",
-  "fileSizeBytes": 11464102,
+  "sha256": "623af4bee0b0fc77cd423d15623d0b9f3bcaece07b32e06cbad368f0a22159c6",
+  "fileSizeBytes": 11423569,
   "fileSizeMB": "10.9MB"
 }

@@ -15,6 +15,7 @@ import {
   ArrowUpRight,
   History,
   Clock,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface SearchModalProps {
@@ -23,6 +24,7 @@ interface SearchModalProps {
   onSelectMovie: (movie: Movie) => void;
   initialMovies?: Movie[];
   isAdultMode?: boolean;
+  isFamilyMode?: boolean;
 }
 
 const POPULAR_TAGS = [
@@ -68,6 +70,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
   onSelectMovie,
   initialMovies = [],
   isAdultMode = false,
+  isFamilyMode = false,
 }) => {
   const [query, setQuery] = useState('');
   // Mode: 'idle' (blank) | 'suggestions' (typing, showing movie title suggestions only) | 'results' (user confirmed title, showing content cards)
@@ -79,11 +82,14 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
   const [loading, setLoading] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-  // Filter helper: strips 18+ content in standard mode, passes everything in 18+ mode
+  // Safe mode is strictly active if isAdultMode is false OR isFamilyMode is true
+  const isSafeMode = isFamilyMode || !isAdultMode;
+
+  // Filter helper: strips 18+ content in safe mode, passes everything only in adult mode
   const filterAdult = useCallback((movies: Movie[]): Movie[] => {
-    if (isAdultMode) return movies;
+    if (!isSafeMode) return movies;
     return movies.filter((m) => !isAdultContent(m));
-  }, [isAdultMode]);
+  }, [isSafeMode]);
 
   // Recent searches saved in localStorage
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
@@ -103,6 +109,8 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
   const saveRecentSearch = useCallback((term: string) => {
     const trimmed = term.trim();
     if (!trimmed) return;
+    // Do not save adult terms into recent searches in safe mode
+    if (isSafeMode && isAdultSearchTerm(trimmed)) return;
     setRecentSearches((prev) => {
       const next = [trimmed, ...prev.filter((item) => item.toLowerCase() !== trimmed.toLowerCase())].slice(0, 8);
       try {
@@ -110,7 +118,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
       } catch {}
       return next;
     });
-  }, []);
+  }, [isSafeMode]);
 
   const clearRecentSearches = useCallback(() => {
     setRecentSearches([]);
@@ -120,9 +128,9 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
   }, []);
 
   const displayRecentSearches = React.useMemo(() => {
-    if (isAdultMode) return recentSearches;
+    if (!isSafeMode) return recentSearches;
     return recentSearches.filter((s) => !isAdultSearchTerm(s));
-  }, [recentSearches, isAdultMode]);
+  }, [recentSearches, isSafeMode]);
 
   // Sync initialMovies if provided
   useEffect(() => {
@@ -167,7 +175,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [isOpen, trendingMovies.length]);
+  }, [isOpen, trendingMovies.length, filterAdult]);
 
   // Keyboard shortcut listener for Escape
   useEffect(() => {
@@ -189,8 +197,8 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
       return;
     }
 
-    // On standard first page, immediately block any pornography/adult query suggestions
-    if (!isAdultMode && isAdultSearchTerm(q)) {
+    // In Safe/Family mode, immediately block any pornography/adult query suggestions
+    if (isSafeMode && isAdultSearchTerm(q)) {
       setSuggestions([]);
       setLoadingSuggestions(false);
       return;
@@ -199,8 +207,8 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
     const qLower = q.toLowerCase();
 
     // 1. Instant local suggestions from initial movies & popular topics
-    const safeInitial = isAdultMode ? initialMovies : initialMovies.filter((m) => !isAdultContent(m));
-    const safeTrending = isAdultMode ? trendingMovies : trendingMovies.filter((m) => !isAdultContent(m));
+    const safeInitial = !isSafeMode ? initialMovies : initialMovies.filter((m) => !isAdultContent(m));
+    const safeTrending = !isSafeMode ? trendingMovies : trendingMovies.filter((m) => !isAdultContent(m));
 
     const localMatches = safeInitial
       .filter((m) => m.title.toLowerCase().includes(qLower))
@@ -214,7 +222,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
 
     const tagMatches = POPULAR_TAGS.filter((t) => t.toLowerCase().includes(qLower)).slice(0, 3);
     const instantSuggs = Array.from(new Set([...localMatches, ...trendingMatches, ...tagMatches]));
-    const filteredInstant = isAdultMode ? instantSuggs : instantSuggs.filter((s) => !isAdultSearchTerm(s));
+    const filteredInstant = !isSafeMode ? instantSuggs : instantSuggs.filter((s) => !isAdultSearchTerm(s));
 
     if (filteredInstant.length > 0) {
       setSuggestions(filteredInstant);
@@ -225,8 +233,8 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
       const serverSuggs = await movieboxService.getSuggestions(q);
       const combined = Array.from(new Set([...(serverSuggs || []), ...filteredInstant]));
       
-      // CRITICAL: When isAdultMode === false, strictly eliminate all pornography & 18+ suggestions
-      const finalSuggs = isAdultMode
+      // CRITICAL: When isSafeMode is active, strictly eliminate all pornography & 18+ suggestions
+      const finalSuggs = !isSafeMode
         ? combined.slice(0, 10)
         : combined.filter((s) => !isAdultSearchTerm(s)).slice(0, 10);
 
@@ -236,15 +244,15 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
     } finally {
       setLoadingSuggestions(false);
     }
-  }, [initialMovies, trendingMovies, isAdultMode]);
+  }, [initialMovies, trendingMovies, isSafeMode]);
 
   // Execute Full Search for Content (Only called when user confirms search / clicks a suggestion)
   const executeSearch = useCallback(async (text: string) => {
     const q = text.trim();
     if (!q) return;
 
-    // On standard first page, do not return pornography content
-    if (!isAdultMode && isAdultSearchTerm(q)) {
+    // In safe / family mode, do not search or return adult content
+    if (isSafeMode && isAdultSearchTerm(q)) {
       setResults([]);
       setRelatedInfo(null);
       setLoading(false);
@@ -285,7 +293,9 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
         setCachedResult(q, { movies: filtered, relatedInfo: null });
       } else {
         // Fallback: Related movies if no exact matches
-        const related = await movieboxService.getRelatedMovies(q, suggestions, signal);
+        // In safe mode, sanitize suggestions passed to related movies
+        const safeSuggestions = isSafeMode ? suggestions.filter((s) => !isAdultSearchTerm(s)) : suggestions;
+        const related = await movieboxService.getRelatedMovies(q, safeSuggestions, signal);
         if (activeSearchIdRef.current !== currentSearchId || signal.aborted) return;
 
         if (related.movies.length > 0) {
@@ -311,7 +321,7 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
         setLoading(false);
       }
     }
-  }, [saveRecentSearch, suggestions]);
+  }, [saveRecentSearch, suggestions, isSafeMode, filterAdult]);
 
   // Handle typing in search input
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -451,57 +461,71 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
         {/* STAGE 1: SUGGESTIONS MODE (When user is typing: ONLY show movie name suggestions, NO content cards) */}
         {searchMode === 'suggestions' && query.trim() && (
           <div className="space-y-2 animate-fade-in max-w-2xl mx-auto">
-            <div className="flex items-center justify-between px-2 pb-1 border-b border-white/[0.08] text-xs font-mono uppercase tracking-wider text-[#8D9AB5]">
-              <span>Suggestions for "{query}"</span>
-              <span className="text-[10px] text-[#35A7FF]">Tap to view content</span>
-            </div>
-
-            {/* Direct match search action */}
-            <button
-              type="button"
-              onClick={() => executeSearch(query)}
-              className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl bg-[#0E172B] hover:bg-[#16223D] active:bg-[#176BFF]/15 border border-white/[0.08] text-left transition-all cursor-pointer group shadow-sm"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-[#176BFF]/15 border border-[#35A7FF]/30 flex items-center justify-center text-[#35A7FF] shrink-0">
-                  <Search className="w-4 h-4" />
+            {isSafeMode && isAdultSearchTerm(query.trim()) ? (
+              <div className="text-center py-10 px-5 rounded-2xl bg-[#0E172B]/90 border border-emerald-500/30 text-xs space-y-3 shadow-xl">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                  <ShieldCheck className="w-6 h-6" />
                 </div>
-                <div className="truncate">
-                  <span className="text-xs text-[#8D9AB5]">Search all titles for </span>
-                  <span className="text-sm font-bold text-[#F5F7FF]">"{query}"</span>
-                </div>
+                <p className="font-bold text-[#F5F7FF] text-base font-headline">Family Safe Search Active</p>
+                <p className="text-[#8D9AB5] max-w-sm mx-auto font-body text-xs leading-relaxed">
+                  18+ adult content, adult web series, and explicit suggestions are blocked in Family Mode.
+                </p>
               </div>
-              <span className="text-xs font-semibold text-[#35A7FF] flex items-center gap-1 shrink-0 group-hover:translate-x-0.5 transition-transform">
-                <span>View</span>
-                <ArrowUpRight className="w-4 h-4" />
-              </span>
-            </button>
+            ) : (
+              <>
+                <div className="flex items-center justify-between px-2 pb-1 border-b border-white/[0.08] text-xs font-mono uppercase tracking-wider text-[#8D9AB5]">
+                  <span>Suggestions for "{query}"</span>
+                  <span className="text-[10px] text-[#35A7FF]">Tap to view content</span>
+                </div>
 
-            {/* Movie Title Suggestions List */}
-            {suggestions.length > 0 ? (
-              <div className="bg-[#0E172B]/90 border border-white/[0.08] rounded-2xl overflow-hidden divide-y divide-white/[0.06] shadow-xl">
-                {suggestions.map((title, idx) => (
-                  <button
-                    key={`${title}_${idx}`}
-                    type="button"
-                    onClick={() => handleSelectSuggestion(title)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[#16223D] active:bg-[#176BFF]/15 text-left transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Film className="w-4 h-4 text-[#8D9AB5] group-hover:text-[#35A7FF] shrink-0 transition-colors" />
-                      <span className="text-sm font-medium text-[#F5F7FF] group-hover:text-[#35A7FF] truncate transition-colors">
-                        {title}
-                      </span>
+                {/* Direct match search action */}
+                <button
+                  type="button"
+                  onClick={() => executeSearch(query)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl bg-[#0E172B] hover:bg-[#16223D] active:bg-[#176BFF]/15 border border-white/[0.08] text-left transition-all cursor-pointer group shadow-sm"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-[#176BFF]/15 border border-[#35A7FF]/30 flex items-center justify-center text-[#35A7FF] shrink-0">
+                      <Search className="w-4 h-4" />
                     </div>
-                    <ArrowUpRight className="w-4 h-4 text-[#8D9AB5] group-hover:text-[#35A7FF] shrink-0 opacity-60 group-hover:opacity-100 transition-all" />
-                  </button>
-                ))}
-              </div>
-            ) : !loadingSuggestions ? (
-              <div className="text-center py-8 text-[#8D9AB5] text-xs">
-                Press Enter or tap "Search" above to find titles for "{query}"
-              </div>
-            ) : null}
+                    <div className="truncate">
+                      <span className="text-xs text-[#8D9AB5]">Search all titles for </span>
+                      <span className="text-sm font-bold text-[#F5F7FF]">"{query}"</span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-[#35A7FF] flex items-center gap-1 shrink-0 group-hover:translate-x-0.5 transition-transform">
+                    <span>View</span>
+                    <ArrowUpRight className="w-4 h-4" />
+                  </span>
+                </button>
+
+                {/* Movie Title Suggestions List */}
+                {suggestions.length > 0 ? (
+                  <div className="bg-[#0E172B]/90 border border-white/[0.08] rounded-2xl overflow-hidden divide-y divide-white/[0.06] shadow-xl">
+                    {suggestions.map((title, idx) => (
+                      <button
+                        key={`${title}_${idx}`}
+                        type="button"
+                        onClick={() => handleSelectSuggestion(title)}
+                        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[#16223D] active:bg-[#176BFF]/15 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Film className="w-4 h-4 text-[#8D9AB5] group-hover:text-[#35A7FF] shrink-0 transition-colors" />
+                          <span className="text-sm font-medium text-[#F5F7FF] group-hover:text-[#35A7FF] truncate transition-colors">
+                            {title}
+                          </span>
+                        </div>
+                        <ArrowUpRight className="w-4 h-4 text-[#8D9AB5] group-hover:text-[#35A7FF] shrink-0 opacity-60 group-hover:opacity-100 transition-all" />
+                      </button>
+                    ))}
+                  </div>
+                ) : !loadingSuggestions ? (
+                  <div className="text-center py-8 text-[#8D9AB5] text-xs">
+                    Press Enter or tap "Search" above to find titles for "{query}"
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
         )}
 
@@ -556,6 +580,31 @@ export const SearchModal: React.FC<SearchModalProps> = memo(({
                         }}
                       />
                     </div>
+                  ))}
+                </div>
+              </div>
+            ) : isSafeMode && isAdultSearchTerm(query.trim()) ? (
+              /* Safe Search Blocked Notice */
+              <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+                <div className="w-16 h-16 rounded-2xl bg-[#0E172B] border border-emerald-500/30 flex items-center justify-center mb-4 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+                  <ShieldCheck className="w-8 h-8" />
+                </div>
+                <p className="text-[#F5F7FF] text-base font-semibold font-headline">
+                  Family Safe Search Active
+                </p>
+                <p className="text-xs text-[#8D9AB5] mt-1.5 max-w-sm font-body">
+                  18+ adult content and erotic series are blocked in Family Mode. Please search for family-safe titles.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-5 max-w-md">
+                  {POPULAR_TAGS.slice(0, 6).map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => handleTagClick(tag)}
+                      className="px-3.5 py-1.5 rounded-full bg-[#0E172B] hover:bg-[#176BFF]/15 active:bg-[#176BFF]/25 border border-white/[0.08] hover:border-[#35A7FF]/40 text-xs text-[#8D9AB5] hover:text-[#35A7FF] cursor-pointer transition-colors press-feedback"
+                    >
+                      {tag}
+                    </button>
                   ))}
                 </div>
               </div>

@@ -60,6 +60,19 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
     movieboxService.getDetails(movie.id, movie.detailPath).then((d) => {
       if (isMounted && d) {
         setDetails(d);
+        // Pre-warm stream for zero-latency 0ms startup
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+          const mType = (d.media_type || movie.media_type || 'movie');
+          const isTvShow = mType === 'series' || mType === 'tv';
+          movieboxService.getStreams(
+            movie.id,
+            d.detailPath || movie.detailPath,
+            isTvShow ? 'series' : 'movie',
+            1,
+            1,
+            movie.title
+          ).catch(() => {});
+        }
       }
     });
 
@@ -74,6 +87,23 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
       isMounted = false;
     };
   }, [movie, onClose]);
+
+  // Pre-warm active season/episode stream for TV series
+  useEffect(() => {
+    if (!movie || !movie.id) return;
+    const isTvShow = movie.media_type === 'series' || movie.media_type === 'tv' || Boolean(details?.seasons && details.seasons.length > 0);
+    if (!isTvShow) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      movieboxService.getStreams(
+        movie.id,
+        details?.detailPath || movie.detailPath,
+        'series',
+        selectedSeason,
+        selectedEpisode,
+        movie.title
+      ).catch(() => {});
+    }
+  }, [movie?.id, movie?.detailPath, details?.detailPath, details?.seasons, selectedSeason, selectedEpisode]);
 
   const handleClose = useCallback(() => {
     queueMicrotask(() => { if (navigator.vibrate) navigator.vibrate(8); });
@@ -274,10 +304,23 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = memo(({
       onClick={handleBackdropClick}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#050A18]/85 backdrop-blur-md sm:p-4 md:p-6 overflow-y-auto animate-backdrop-fade"
     >
+      {/* Ambient Dynamic Background Glow (Luxury cinematic bloom for tablet/desktop) */}
+      <div
+        aria-hidden="true"
+        className="hidden sm:block absolute inset-0 pointer-events-none overflow-hidden opacity-30 select-none transition-opacity duration-300"
+      >
+        <img
+          src={bannerImg}
+          alt=""
+          className="w-full h-full object-cover blur-[100px] scale-125 saturate-150"
+        />
+        <div className="absolute inset-0 bg-[#050A18]/65" />
+      </div>
+
       {/* Bottom Sheet on Mobile / Centered Card on Desktop */}
       <div
         ref={modalScrollRef}
-        className="relative w-full max-w-2xl bg-[#0B1224] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.85)] max-h-[92vh] sm:max-h-[85vh] overflow-y-auto animate-slide-in-bottom sm:animate-scale-in pb-8"
+        className="relative z-10 w-full max-w-2xl bg-[#0B1224] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.85)] max-h-[92vh] sm:max-h-[85vh] overflow-y-auto animate-slide-in-bottom sm:animate-scale-in pb-8"
       >
         {/* Mobile Drag Handle */}
         <div className="sm:hidden flex justify-center pt-2.5 pb-1">

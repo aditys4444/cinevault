@@ -13,6 +13,16 @@ export const MovieCardSkeleton: React.FC = () => (
   </div>
 );
 
+export const MovieRowCardSkeleton: React.FC = () => (
+  <div className="flex-shrink-0 w-[130px] sm:w-[155px] md:w-[175px] rounded-xl overflow-hidden bg-[#0E172B] border border-white/[0.06] shadow select-none flex flex-col">
+    <Shimmer className="aspect-[2/3] w-full" />
+    <div className="p-2 sm:p-2.5 bg-[#0B1224] space-y-1.5">
+      <Shimmer className="h-3 w-4/5 rounded-md" />
+      <Shimmer className="h-2.5 w-1/2 rounded-md" />
+    </div>
+  </div>
+);
+
 export const LandscapeCardSkeleton: React.FC = () => (
   <div className="flex-shrink-0 w-36 sm:w-52 md:w-64 rounded-xl overflow-hidden bg-[#0E172B] border border-white/[0.06] shadow select-none">
     <Shimmer className="aspect-video w-full" />
@@ -27,18 +37,21 @@ export const MovieRowSkeleton: React.FC<{ title?: string; count?: number }> = ({
   title,
   count = 6,
 }) => (
-  <section className="space-y-2 px-4 sm:px-6 md:px-8 my-3 sm:my-4 select-none">
+  <section className="space-y-2.5 px-4 sm:px-6 md:px-8 my-3 sm:my-4 select-none">
     <div className="flex items-center justify-between px-1 py-1">
       {title ? (
         <span className="text-xs font-bold text-[#8D9AB5] uppercase tracking-wider font-mono">{title}</span>
       ) : (
-        <div className="h-5 w-44 bg-[#0E172B] rounded-md animate-pulse" />
+        <div className="flex items-center gap-2.5">
+          <div className="w-1.5 h-4.5 rounded-full bg-gradient-to-b from-[#176BFF]/60 to-[#35A7FF]/60" />
+          <div className="h-5 w-40 bg-[#0E172B] rounded-md animate-pulse" />
+        </div>
       )}
       <div className="h-4 w-16 bg-[#0E172B] rounded-full animate-pulse" />
     </div>
-    <div className="flex items-center gap-3 sm:gap-4 overflow-hidden py-2 px-1">
+    <div className="flex items-center gap-3 sm:gap-4 overflow-hidden py-1.5 px-1">
       {Array.from({ length: count }).map((_, i) => (
-        <LandscapeCardSkeleton key={i} />
+        <MovieRowCardSkeleton key={i} />
       ))}
     </div>
   </section>
